@@ -1,7 +1,22 @@
 import axios from "axios";
 
+// Détection automatique de l'URL API selon l'environnement
+const getApiUrl = () => {
+  // En production, utiliser la variable d'environnement
+  if (import.meta.env.PROD) {
+    return import.meta.env.VITE_API_URL || 
+           import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 
+           'https://invitationauvoyage-backend.onrender.com/';
+  }
+  // En développement
+  return import.meta.env.VITE_API_URL || "http://127.0.0.1:8003/";
+};
+
+const apiUrl = getApiUrl();
+console.log('🌐 [CONFIG] URL API utilisée:', apiUrl);
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8003/",
+  baseURL: apiUrl,
   timeout: 60000, // Augmenté à 60 secondes pour les opérations complexes
   withCredentials: false,
 });
