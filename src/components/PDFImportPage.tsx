@@ -45,6 +45,7 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
       console.log('📤 Envoi vers:', `${apiBaseUrl}/pdf-to-gjs/`);
       const res = await fetch(`${apiBaseUrl}/pdf-to-gjs/`, {
         method: 'POST',
+        mode: 'cors',
         body: form
       });
       
