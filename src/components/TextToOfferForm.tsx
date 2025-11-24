@@ -1,15 +1,11 @@
 import React, { useState } from 'react';
 import { api } from '../api/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { 
-  FileText, 
-  Building2, 
-  Sparkles, 
   Loader2,
   AlertCircle,
-  Wand2
+  Info
 } from 'lucide-react';
 
 interface CompanyInfo {
@@ -24,23 +20,27 @@ interface TextToOfferFormProps {
   onNavigateToEditor?: (offerData: any) => void;
 }
 
+type OfferType = 'circuit' | 'sejour' | 'transport';
+
 const TextToOfferForm: React.FC<TextToOfferFormProps> = ({ onNavigateToEditor }) => {
   const [text, setText] = useState('');
-  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>({
+  const [offerType, setOfferType] = useState<OfferType>('circuit');
+  const [flightInput, setFlightInput] = useState<string>('');
+  const [websiteUrls, setWebsiteUrls] = useState<string[]>(['']);
+  const [exampleTemplates, setExampleTemplates] = useState<string[]>(['']);
+  const [companyInfo] = useState<CompanyInfo>({
     name: 'Invitation au Voyage',
     address: '123 Rue de l\'Innovation, 75001 Paris',
     phone: '+33 1 23 45 67 89',
     email: 'contact@invitationauvoyage.fr',
     website: 'www.invitationauvoyage.fr'
   });
-  const [generatedOffer] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-
   const handleGenerateCompleteOffer = async () => {
-    if (!text.trim()) {
-      setError('Veuillez saisir une description de votre demande.');
+    if (!text.trim() && !flightInput.trim()) {
+      setError('Veuillez saisir une description de votre demande OU des infos de vol.');
       return;
     }
 
@@ -48,259 +48,275 @@ const TextToOfferForm: React.FC<TextToOfferFormProps> = ({ onNavigateToEditor })
     setError('');
 
     try {
+      const validUrls = websiteUrls.filter(url => url.trim() !== '');
+      const validTemplates = exampleTemplates.filter(template => template.trim() !== '');
+      
       const response = await api.post('api/generate-travel-offer/', {
         text: text,
+        offer_type: offerType,
+        flight_input: flightInput || undefined,
+        website_urls: validUrls,
+        example_templates: validTemplates,
         company_info: companyInfo
       });
 
       const offerData = response.data;
       
-      if (onNavigateToEditor) {
-        // Naviguer vers l'éditeur avec les données
-        onNavigateToEditor(offerData);
-      } else {
-        console.log('Offre complète générée:', offerData);
+      if (response.data.metadata) {
+        console.log('📊 MÉTADONNÉES:', response.data.metadata);
       }
 
+      if (onNavigateToEditor && offerData) {
+        onNavigateToEditor(offerData);
+      }
+      
     } catch (err: any) {
-      setError(err.detail || 'Erreur lors de la génération de l\'offre complète');
+      console.error('Erreur lors de la génération:', err);
+      setError(err.response?.data?.detail || err.message || 'Erreur lors de la génération');
     } finally {
       setLoading(false);
     }
   };
 
+  const addUrlField = () => setWebsiteUrls([...websiteUrls, '']);
+  const removeUrlField = (index: number) => setWebsiteUrls(websiteUrls.filter((_, i) => i !== index));
+  const updateUrlField = (index: number, value: string) => {
+    const newUrls = [...websiteUrls];
+    newUrls[index] = value;
+    setWebsiteUrls(newUrls);
+  };
+
+  const addTemplateField = () => setExampleTemplates([...exampleTemplates, '']);
+  const removeTemplateField = (index: number) => setExampleTemplates(exampleTemplates.filter((_, i) => i !== index));
+  const updateTemplateField = (index: number, value: string) => {
+    const newTemplates = [...exampleTemplates];
+    newTemplates[index] = value;
+    setExampleTemplates(newTemplates);
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col space-y-2">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-primary" />
+    <div className="min-h-screen bg-white">
+      {/* Main Content */}
+      <div className="px-8 py-8">
+        <div className="grid grid-cols-12 gap-12">
+          {/* Left Sidebar - Menu */}
+          <div className="col-span-2">
+            <nav className="space-y-1 sticky top-8">
+              <div className="px-3 py-2 text-sm font-medium text-gray-900">
+                Informations de l'offre
+              </div>
+              <div className="px-3 py-2 text-sm font-medium text-gray-500">
+                Informations de vol
+              </div>
+              <div className="px-3 py-2 text-sm font-medium text-gray-500">
+                Sources de contenu
+              </div>
+            </nav>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Générateur d'Offres IA</h1>
-            <p className="text-muted-foreground">
-              Transformez votre texte en offre commerciale professionnelle
-            </p>
+
+          {/* Right Content Area */}
+          <div className="col-span-10 space-y-8">
+            {/* Offer & Flight Information Section */}
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold text-gray-900">Informations de l'offre</h2>
+
+              {/* Offer Type */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  Type d'offre
+                  <div className="group relative">
+                    <Info className="w-4 h-4 text-gray-400" />
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-10">
+                      Choisissez le type d'offre de voyage
+                    </div>
+                  </div>
+                </label>
+                <select
+                  value={offerType}
+                  onChange={(e) => setOfferType(e.target.value as OfferType)}
+                  className="w-full px-4 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:bg-white transition-colors"
+                >
+                  <option value="">Sélectionner...</option>
+                  <option value="circuit">Circuit - Multi-destinations</option>
+                  <option value="sejour">Séjour - Destination unique</option>
+                  <option value="transport">Transport - Vol uniquement</option>
+                </select>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  Description
+                  <div className="group relative">
+                    <Info className="w-4 h-4 text-gray-400" />
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-10">
+                      Optionnel si vous fournissez les infos de vol
+                    </div>
+                  </div>
+                </label>
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Saisissez une description..."
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:bg-white transition-colors resize-none"
+                  rows={4}
+                />
+              </div>
+
+              {/* Flight Details */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  Détails du vol - Format libre
+                  <div className="group relative">
+                    <Info className="w-4 h-4 text-gray-400" />
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-10">
+                      Collez les infos de vol directement. Formats acceptés : GDS, numéro de vol + date, ou texte libre
+                    </div>
+                  </div>
+                </label>
+                <textarea
+                  value={flightInput}
+                  onChange={(e) => setFlightInput(e.target.value)}
+                  placeholder="Saisissez les infos de vol..."
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:bg-white transition-colors resize-none"
+                  rows={3}
+                />
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <p className="text-xs text-gray-600 mb-2 font-medium">💡 Formats acceptés :</p>
+                  <ul className="text-xs text-gray-500 space-y-1 ml-4">
+                    <li>• <strong>Numéro de vol :</strong> AF001 18/11/2025</li>
+                    <li>• <strong>Format GDS :</strong> 18NOV-25NOV BRU JFK 10:00 14:00</li>
+                    <li>• <strong>Texte libre :</strong> Vol de Paris à New York le 18 novembre</li>
+                  </ul>
+                  <p className="text-xs text-purple-600 mt-2">
+                    🚀 Notre système détecte automatiquement le format et recherche les informations via Amadeus (500+ compagnies)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content Sources Section */}
+            <div className="space-y-6 pt-6 border-t border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Sources de contenu</h2>
+
+              {/* Website URLs */}
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  URLs de sites web
+                  <div className="group relative">
+                    <Info className="w-4 h-4 text-gray-400" />
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-10">
+                      Ajoutez des URLs pour extraire le contenu automatiquement
+                    </div>
+                  </div>
+                </label>
+                {websiteUrls.map((url, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="url"
+                      value={url}
+                      onChange={(e) => updateUrlField(index, e.target.value)}
+                      placeholder="Saisissez une URL..."
+                      className="flex-1 bg-gray-50 border-gray-200 focus:bg-white"
+                    />
+                    {websiteUrls.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeUrlField(index)}
+                        className="hover:bg-gray-100"
+                      >
+                        ×
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  onClick={addUrlField}
+                  className="w-full border-dashed border-gray-300 text-gray-600 hover:bg-gray-50"
+                >
+                  + Ajouter une URL
+                </Button>
+              </div>
+
+              {/* Templates */}
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  Exemples de modèles
+                  <div className="group relative">
+                    <Info className="w-4 h-4 text-gray-400" />
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-10">
+                      Ajoutez des exemples de contenu ou modèles JSON
+                    </div>
+                  </div>
+                </label>
+                {exampleTemplates.map((template, index) => (
+                  <div key={index} className="flex gap-2">
+                    <textarea
+                      value={template}
+                      onChange={(e) => updateTemplateField(index, e.target.value)}
+                      placeholder="Saisissez un modèle..."
+                      className="flex-1 px-4 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:bg-white transition-colors resize-none"
+                      rows={2}
+                    />
+                    {exampleTemplates.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeTemplateField(index)}
+                        className="hover:bg-gray-100"
+                      >
+                        ×
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  onClick={addTemplateField}
+                  className="w-full border-dashed border-gray-300 text-gray-600 hover:bg-gray-50"
+                >
+                  + Ajouter un modèle
+                </Button>
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between pt-6">
+              <Button
+                variant="ghost"
+                onClick={() => window.history.back()}
+                className="text-gray-600"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={handleGenerateCompleteOffer}
+                disabled={loading}
+                className="bg-black hover:bg-gray-800 text-white px-6"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Génération...
+                  </>
+                ) : (
+                  'Suivant'
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Formulaire de saisie */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <FileText className="w-5 h-5" />
-              <span>Votre Demande</span>
-            </CardTitle>
-            <CardDescription>
-              Décrivez votre projet et vos informations d'entreprise
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">
-                Décrivez votre projet ou service
-              </label>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Ex: Je souhaite créer un site web e-commerce pour vendre des produits artisanaux. Le site doit inclure un catalogue, un panier d'achat, et un système de paiement sécurisé..."
-                className="flex min-h-[120px] w-full rounded-xl border border-border/60 bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary/60 disabled:cursor-not-allowed disabled:opacity-50 transition-colors duration-200 resize-vertical"
-              />
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <Building2 className="w-4 h-4 text-muted-foreground" />
-                <h4 className="text-sm font-medium text-foreground">Informations de l'entreprise</h4>
-              </div>
-              
-              <div className="grid gap-3">
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Nom de l'entreprise</label>
-                  <Input
-                    type="text"
-                    value={companyInfo.name}
-                    onChange={(e) => setCompanyInfo({...companyInfo, name: e.target.value})}
-                    placeholder="Nom de l'entreprise"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Adresse</label>
-                  <Input
-                    type="text"
-                    value={companyInfo.address}
-                    onChange={(e) => setCompanyInfo({...companyInfo, address: e.target.value})}
-                    placeholder="Adresse"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Téléphone</label>
-                  <Input
-                    type="text"
-                    value={companyInfo.phone}
-                    onChange={(e) => setCompanyInfo({...companyInfo, phone: e.target.value})}
-                    placeholder="Téléphone"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Email</label>
-                  <Input
-                    type="email"
-                    value={companyInfo.email}
-                    onChange={(e) => setCompanyInfo({...companyInfo, email: e.target.value})}
-                    placeholder="Email"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Site web</label>
-                  <Input
-                    type="text"
-                    value={companyInfo.website}
-                    onChange={(e) => setCompanyInfo({...companyInfo, website: e.target.value})}
-                    placeholder="Site web"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Button
-              onClick={handleGenerateCompleteOffer}
-              disabled={loading}
-              className="w-full h-12 text-base font-semibold"
-              size="lg"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Génération...
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  Créer avec l'éditeur visuel
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Résultat */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <FileText className="w-5 h-5" />
-              <span>Aperçu de l'offre</span>
-            </CardTitle>
-            <CardDescription>
-              Votre offre générée apparaîtra ici
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent>
-            <div className="min-h-[400px]">
-              {error && (
-                <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-4 flex items-start space-x-2">
-                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                  <span className="text-sm">{error}</span>
-                </div>
-              )}
-              
-              {loading && (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <Loader2 className="w-8 h-8 animate-spin mb-4" />
-                  <p className="text-sm">Génération de votre offre en cours...</p>
-                </div>
-              )}
-              
-              {generatedOffer && (
-                <div className="prose prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono bg-muted/30 p-4 rounded-lg">
-                    {generatedOffer}
-                  </pre>
-                </div>
-              )}
-              
-              {!generatedOffer && !loading && !error && (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <div className="w-16 h-16 bg-muted/30 rounded-2xl flex items-center justify-center mb-4">
-                    <FileText className="w-8 h-8" />
-                  </div>
-                  <p className="text-sm font-medium mb-1">Votre offre générée apparaîtra ici</p>
-                  <p className="text-xs opacity-80">
-                    Remplissez le formulaire et cliquez sur "Créer avec l'éditeur visuel"
-                  </p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Instructions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Sparkles className="w-5 h-5" />
-            <span>Comment ça marche ?</span>
-          </CardTitle>
-          <CardDescription>
-            Un processus simple en 4 étapes pour créer votre offre
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto">
-                <span className="text-lg">1️⃣</span>
-              </div>
-              <h4 className="font-semibold text-sm">Décrivez votre projet</h4>
-              <p className="text-xs text-muted-foreground">
-                Expliquez en détail ce que vous proposez à votre client
-              </p>
-            </div>
-            
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto">
-                <span className="text-lg">2️⃣</span>
-              </div>
-              <h4 className="font-semibold text-sm">Remplissez vos infos</h4>
-              <p className="text-xs text-muted-foreground">
-                Ajoutez les coordonnées de votre entreprise
-              </p>
-            </div>
-            
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto">
-                <span className="text-lg">3️⃣</span>
-              </div>
-              <h4 className="font-semibold text-sm">Générez l'offre</h4>
-              <p className="text-xs text-muted-foreground">
-                L'IA crée une offre professionnelle automatiquement
-              </p>
-            </div>
-            
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mx-auto">
-                <span className="text-lg">4️⃣</span>
-              </div>
-              <h4 className="font-semibold text-sm">Éditez et personnalisez</h4>
-              <p className="text-xs text-muted-foreground">
-                Utilisez l'éditeur visuel pour finaliser votre offre
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };

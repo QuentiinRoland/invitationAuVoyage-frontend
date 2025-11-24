@@ -13,7 +13,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          grapesjs: ['grapesjs']
+          craftjs: ['@craftjs/core', '@craftjs/layers']
         }
       }
     }

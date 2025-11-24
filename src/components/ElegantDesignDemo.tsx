@@ -1,5 +1,5 @@
 import React from 'react';
-import GrapesJSEditor from './GrapesJSEditor';
+import CraftJSEditor from './CraftJSEditor';
 
 // Données de démonstration pour tester le design élégant
 const elegantDemoData = {
@@ -93,7 +93,7 @@ const ElegantDesignDemo: React.FC = () => {
         🎨 Démonstration du Design Élégant - Style "Invitation au Voyage"
       </div>
       
-      <GrapesJSEditor
+      <CraftJSEditor
         onSave={handleSave}
         prefilledData={elegantDemoData}
         apiBaseUrl="http://127.0.0.1:8003/api"

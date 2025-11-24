@@ -65,3 +65,70 @@
     @apply font-semibold tracking-tight;
   }
 }
+
+/* Puck Editor Customization */
+.Puck {
+  font-family: Inter, system-ui, sans-serif !important;
+}
+
+.Puck-root {
+  --puck-color-grey-01: #f8f9fa;
+  --puck-color-grey-02: #e9ecef;
+  --puck-color-grey-03: #dee2e6;
+  --puck-color-grey-04: #ced4da;
+  --puck-color-grey-05: #adb5bd;
+  --puck-color-grey-06: #6c757d;
+  --puck-color-primary: #667eea;
+  --puck-color-primary-light: #7f92f0;
+}
+
+.Puck-preview {
+  background-color: #ffffff !important;
+  padding: 40px !important;
+}
+
+.Puck-fields {
+  background-color: #f8f9fa !important;
+}
+
+.Puck-field {
+  margin-bottom: 20px !important;
+}
+
+.Puck-field-label {
+  font-weight: 600 !important;
+  color: #2c3e50 !important;
+  margin-bottom: 8px !important;
+  font-size: 14px !important;
+}
+
+.Puck-input, .Puck-textarea {
+  border: 1px solid #dee2e6 !important;
+  border-radius: 6px !important;
+  padding: 10px 12px !important;
+  font-size: 14px !important;
+  transition: border-color 0.2s !important;
+}
+
+.Puck-input:focus, .Puck-textarea:focus {
+  border-color: #667eea !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+}
+
+.Puck-button {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s !important;
+}
+
+.Puck-button--primary {
+  background-color: #667eea !important;
+  color: white !important;
+}
+
+.Puck-button--primary:hover {
+  background-color: #5568d3 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3) !important;
+}

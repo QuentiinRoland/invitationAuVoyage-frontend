@@ -2,7 +2,8 @@ import { useState } from "react";
 import "./App.css";
 import AskOnceForm from "./components/PdfReaderForm";
 import TextToOfferForm from "./components/TextToOfferForm";
-import OfferEditor from "./components/GrapesJSEditor";
+// import OfferEditor from "./components/CraftJSEditor";
+import OfferEditor from "./components/PuckEditor";
 import PDFReformatter from "./components/PDFReformatter";
 import PDFImportPage from "./components/PDFImportPage";
 import DocumentLibrary from "./components/ModernDocumentLibrary";
@@ -26,9 +27,13 @@ function App() {
   };
 
 
-  const handleNavigateToEditor = (offerData: any) => {
+  const handleNavigateToEditor = (offerData?: any) => {
     console.log('Navigation vers éditeur avec données:', offerData);
-    setEditorData(offerData);
+    
+    if (offerData) {
+      // Pass data directly via state instead of sessionStorage
+      setEditorData(offerData);
+    }
     setDocumentId(undefined); // Reset document ID pour les nouvelles données
     setActiveTab('offer-editor');
   };
@@ -40,20 +45,10 @@ function App() {
     setActiveTab('offer-editor');
   };
 
-  // Vérifier s'il y a des données importées depuis PDFImportPage
+  // Check for imported data (no longer using sessionStorage)
   const checkForImportedData = () => {
-    const importedData = sessionStorage.getItem('importedPdfData');
-    if (importedData) {
-      const data = JSON.parse(importedData);
-      console.log('📥 Récupération depuis sessionStorage:', {
-        ...data,
-        assets: data.assets?.length || 0
-      });
-      setEditorData(data);
-      sessionStorage.removeItem('importedPdfData'); // Nettoyer après utilisation
-      return data;
-    }
-    return null;
+    // Data is now passed directly via props
+    return editorData || null;
   };
 
   return (
@@ -85,7 +80,7 @@ function App() {
           </header>
 
           {/* Page Content */}
-          <main className={`flex-1 overflow-auto ${activeTab === 'offer-editor' ? '' : 'p-6'}`}>
+          <main className={`flex-1 overflow-auto ${['offer-editor', 'text-to-offer', 'pdf-import'].includes(activeTab) ? '' : 'p-6'}`}>
             {activeTab === 'dashboard' && (
               <ProtectedRoute>
                 <Dashboard 
@@ -96,14 +91,13 @@ function App() {
             )}
             {activeTab === 'text-to-offer' && (
               <ProtectedRoute>
-                <div className="max-w-4xl mx-auto">
-                  <TextToOfferForm onNavigateToEditor={handleNavigateToEditor} />
-                </div>
+                <TextToOfferForm onNavigateToEditor={handleNavigateToEditor} />
               </ProtectedRoute>
             )}
             {activeTab === 'offer-editor' && (
               <ProtectedRoute>
                 <OfferEditor 
+                  key={editorData ? Date.now() : 'default'}
                   onSave={handleSaveOffer}
                   prefilledData={editorData || checkForImportedData()}
                   documentId={documentId}
@@ -121,12 +115,10 @@ function App() {
             )}
             {activeTab === 'pdf-import' && (
               <ProtectedRoute>
-                <div className="max-w-4xl mx-auto">
-                  <PDFImportPage 
-                    apiBaseUrl={API_BASE_URL}
-                    onNavigateToEditor={() => setActiveTab('offer-editor')}
-                  />
-                </div>
+                <PDFImportPage 
+                  apiBaseUrl={API_BASE_URL}
+                  onNavigateToEditor={handleNavigateToEditor}
+                />
               </ProtectedRoute>
             )}
           </main>

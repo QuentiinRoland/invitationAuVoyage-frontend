@@ -597,7 +597,7 @@ const DocumentLibraryWithFolders: React.FC<DocumentLibraryProps> = ({
                   
                   <span style={{
                     backgroundColor: doc.document_type === 'pdf_import' ? '#E74C3C' :
-                                   doc.document_type === 'grapesjs_project' ? '#9B59B6' : '#27AE60',
+                                   doc.document_type === 'craftjs_project' ? '#9B59B6' : '#27AE60',
                     color: 'white',
                     padding: '3px 6px',
                     borderRadius: '10px',

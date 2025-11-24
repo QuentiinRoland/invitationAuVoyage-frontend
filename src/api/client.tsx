@@ -17,7 +17,7 @@ console.log('🌐 [CONFIG] URL API utilisée:', apiUrl);
 
 export const api = axios.create({
   baseURL: apiUrl,
-  timeout: 60000, // Augmenté à 60 secondes pour les opérations complexes
+  timeout: 180000, // Augmenté à 180 secondes (3 minutes) pour les opérations complexes (scraping + ChatGPT)
   withCredentials: false,
 });
 

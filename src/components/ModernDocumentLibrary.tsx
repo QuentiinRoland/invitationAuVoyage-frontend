@@ -82,6 +82,15 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
 
   // Charger les dossiers et documents UNE SEULE FOIS au montage
   useEffect(() => {
+    // Vérifier si nous devons forcer une réinitialisation (nouvelle structure de dossiers)
+    const currentVersion = localStorage.getItem('folders_version');
+    if (currentVersion !== '2.0') {
+      console.log('🔄 Nouvelle structure de dossiers détectée - réinitialisation...');
+      localStorage.removeItem('demo_folders');
+      localStorage.removeItem('demo_documents');
+      localStorage.setItem('folders_version', '2.0');
+    }
+    
     loadFolders();
     loadDocuments();
   }, []); // Pas de dépendances = une seule fois au montage
@@ -152,50 +161,50 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
       }
     }
     
-    // FALLBACK : Dossiers de démonstration par défaut
-    console.log('Chargement des dossiers de démonstration par défaut...');
+    // FALLBACK : Dossiers principaux par défaut (3 dossiers pour chaque utilisateur)
+    console.log('Chargement des 3 dossiers principaux...');
     const demoFolders: Folder[] = [
           {
             id: 1,
-            name: 'Projets Client',
-            description: 'Documents clients',
+            name: 'Dossier de Denis',
+            description: 'Documents et projets de Denis',
             color: '#3B82F6',
-            icon: '💼',
+            icon: '👤',
             position: 0,
-            full_path: 'Projets Client',
-            documents_count: 2,
-            total_documents_count: 3,
+            full_path: 'Dossier de Denis',
+            documents_count: 0,
+            total_documents_count: 0,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             parent_id: undefined
           },
           {
             id: 2,
-            name: 'Templates',
-            description: 'Modèles d\'offres',
+            name: 'Dossier de Sandrine',
+            description: 'Documents et projets de Sandrine',
             color: '#10B981',
-            icon: '📝',
+            icon: '👤',
             position: 1,
-            full_path: 'Templates',
-            documents_count: 1,
-            total_documents_count: 1,
+            full_path: 'Dossier de Sandrine',
+            documents_count: 0,
+            total_documents_count: 0,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             parent_id: undefined
           },
           {
             id: 3,
-            name: 'Voyages Europe',
-            description: 'Offres pour l\'Europe',
-            color: '#F59E0B',
-            icon: '🌍',
-            position: 0,
-            full_path: 'Projets Client/Voyages Europe',
-            documents_count: 1,
-            total_documents_count: 1,
+            name: 'Dossier Commun',
+            description: 'Documents partagés et communs',
+            color: '#8B5CF6',
+            icon: '📂',
+            position: 2,
+            full_path: 'Dossier Commun',
+            documents_count: 0,
+            total_documents_count: 0,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            parent_id: 1
+            parent_id: undefined
           }
         ];
     setFolders(demoFolders);
@@ -244,18 +253,18 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
       console.warn('API non disponible, utilisation des données de démonstration:', err);
     }
     
-    // FALLBACK FINAL : TOUS les documents de démonstration si l'API échoue
-    // Charger tous les documents UNE SEULE FOIS, le filtrage se fait côté client
-    console.log('Chargement de TOUS les documents de démonstration...');
+    // FALLBACK FINAL : Documents de démonstration si l'API échoue
+    // Démarrer avec quelques documents à la racine
+    console.log('Chargement des documents de démonstration...');
     setIsUsingDemoData(true);
     const allDemoDocuments: Document[] = [
-      // Document à la racine
+      // Documents à la racine (pas encore organisés)
       {
         id: 1,
         title: 'Offre Générale 2024',
         description: 'Offre commerciale générale pour l\'année 2024',
-        document_type: 'grapesjs_project',
-        document_type_display: 'Projet GrapesJS',
+        document_type: 'craftjs_project',
+        document_type_display: 'Projet Craft.js',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         file_size_mb: 2.1,
@@ -265,68 +274,35 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
         assets_count: 2,
         folder_id: undefined
       },
-      // Documents dans "Projets Client" (folder_id: 1)
       {
         id: 2,
-        title: 'Offre Client ABC',
-        description: 'Offre personnalisée pour le client ABC',
-        document_type: 'grapesjs_project',
-        document_type_display: 'Projet GrapesJS',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        title: 'Circuit Europe',
+        description: 'Circuit découverte de l\'Europe',
+        document_type: 'craftjs_project',
+        document_type_display: 'Projet Craft.js',
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+        updated_at: new Date(Date.now() - 86400000).toISOString(),
         file_size_mb: 3.2,
         has_pdf: true,
         has_thumbnail: true,
         company_info: null,
         assets_count: 5,
-        folder_id: 1
+        folder_id: undefined
       },
       {
         id: 3,
-        title: 'Contrat Voyage Groupe',
-        description: 'Contrat pour voyage de groupe',
+        title: 'Voyage en Asie',
+        description: 'Découverte des temples d\'Asie',
         document_type: 'pdf_import',
         document_type_display: 'Import PDF',
-        created_at: new Date(Date.now() - 86400000).toISOString(),
-        updated_at: new Date(Date.now() - 86400000).toISOString(),
+        created_at: new Date(Date.now() - 172800000).toISOString(),
+        updated_at: new Date(Date.now() - 172800000).toISOString(),
         file_size_mb: 1.5,
         has_pdf: true,
         has_thumbnail: false,
         company_info: null,
         assets_count: 1,
-        folder_id: 1
-      },
-      // Document dans "Templates" (folder_id: 2)
-      {
-        id: 4,
-        title: 'Template Standard',
-        description: 'Modèle d\'offre standard pour tous les voyages',
-        document_type: 'pdf_import',
-        document_type_display: 'Import PDF',
-        created_at: new Date(Date.now() - 172800000).toISOString(),
-        updated_at: new Date(Date.now() - 172800000).toISOString(),
-        file_size_mb: 1.8,
-        has_pdf: true,
-        has_thumbnail: false,
-        company_info: null,
-        assets_count: 1,
-        folder_id: 2
-      },
-      // Document dans "Voyages Europe" (folder_id: 3)
-      {
-        id: 5,
-        title: 'Circuit Italie du Nord',
-        description: 'Offre pour circuit en Italie du Nord',
-        document_type: 'grapesjs_project',
-        document_type_display: 'Projet GrapesJS',
-        created_at: new Date(Date.now() - 259200000).toISOString(),
-        updated_at: new Date(Date.now() - 259200000).toISOString(),
-        file_size_mb: 4.1,
-        has_pdf: true,
-        has_thumbnail: true,
-        company_info: null,
-        assets_count: 8,
-        folder_id: 3
+        folder_id: undefined
       }
     ];
         
@@ -470,7 +446,7 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
     switch (type) {
       case 'pdf_import':
         return 'bg-red-100 text-red-800';
-      case 'grapesjs_project':
+      case 'craftjs_project':
         return 'bg-purple-100 text-purple-800';
       default:
         return 'bg-green-100 text-green-800';

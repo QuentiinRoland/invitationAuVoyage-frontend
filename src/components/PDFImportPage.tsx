@@ -1,21 +1,18 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
 import { 
   Upload, 
-  FileText, 
-  Building2, 
-  Phone, 
-  Mail, 
   Loader2,
-  ArrowLeft,
-  CheckCircle
+  CheckCircle,
+  Info,
+  Sparkles,
+  X,
+  FileText
 } from 'lucide-react';
 
 interface PDFImportPageProps {
   apiBaseUrl?: string;
-  onNavigateToEditor?: () => void;
+  onNavigateToEditor?: (data?: any) => void;
 }
 
 const PDFImportPage: React.FC<PDFImportPageProps> = ({ 
@@ -24,13 +21,14 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [companyInfo, setCompanyInfo] = useState({
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const companyInfo = {
     name: 'Invitation au Voyage',
     phone: '+33 1 23 45 67 89',
     email: 'contact@invitationauvoyage.fr',
     address: '',
     website: ''
-  });
+  };
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -62,7 +60,6 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
         images: data.assets?.length
       });
 
-      // Stocker les données dans sessionStorage pour les passer à GrapesJSEditor
       const dataToStore = {
         offer_structure: data.offer_structure,
         assets: data.assets,
@@ -70,15 +67,10 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
         background_url: data.background_url,
         logo_data_url: data.logo_data_url
       };
-      console.log('💾 Stockage dans sessionStorage:', {
-        ...dataToStore,
-        assets: dataToStore.assets?.length || 0
-      });
-      sessionStorage.setItem('importedPdfData', JSON.stringify(dataToStore));
+      console.log('💾 Données préparées pour l\'éditeur');
 
-      // Rediriger vers GrapesJSEditor
       if (onNavigateToEditor) {
-        onNavigateToEditor();
+        onNavigateToEditor(dataToStore);
       }
       
     } catch (e: any) {
@@ -89,230 +81,170 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
     }
   };
 
+  const handleFileSelect = (file: File) => {
+    if (file && file.type === 'application/pdf') {
+      setSelectedFile(file);
+    } else {
+      alert('Please select a PDF file');
+    }
+  };
+
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      handleFileUpload(file);
+      handleFileSelect(file);
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragActive(false);
     
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      handleFileUpload(files[0]);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFileSelect(file);
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
-    setDragActive(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragActive(false);
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col space-y-2">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-            <Upload className="w-5 h-5 text-primary" />
+    <div className="min-h-screen bg-white">
+      {/* Main Content */}
+      <div className="px-8 py-8">
+        <div className="grid grid-cols-12 gap-12">
+          {/* Left Sidebar - Menu */}
+          <div className="col-span-2">
+            <nav className="space-y-1 sticky top-8">
+              <div className="px-3 py-2 text-sm font-medium text-gray-900">
+                Téléchargement PDF
+              </div>
+            </nav>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Importer un PDF d'offre</h1>
-            <p className="text-muted-foreground">
-              Uploadez votre PDF d'offre de voyage et nous le convertirons automatiquement 
-              en sections éditables dans l'éditeur GrapesJS.
-            </p>
-          </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Zone de drop */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <FileText className="w-5 h-5" />
-              <span>Importation PDF</span>
-            </CardTitle>
-            <CardDescription>
-              Glissez-déposez votre fichier PDF ou cliquez pour le sélectionner
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent>
+          {/* Right Content Area */}
+          <div className="col-span-10 space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-1">Import de document</h2>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Info className="w-4 h-4" />
+                <span>Téléchargez votre fichier PDF pour le convertir en format éditable</span>
+              </div>
+            </div>
+
+            {/* Upload Area */}
             <div
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
               onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              className={`
-                border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200
-                ${dragActive 
-                  ? 'border-primary bg-primary/5' 
-                  : 'border-border hover:border-primary/50 hover:bg-muted/30'
-                }
-              `}
-              onClick={() => document.getElementById('fileInput')?.click()}
+              className={`relative border-2 border-dashed rounded-lg p-12 text-center transition-all ${
+                dragActive
+                  ? 'border-purple-500 bg-purple-50'
+                  : 'border-gray-300 hover:border-purple-400'
+              }`}
             >
-              {isLoading ? (
-                <div className="flex flex-col items-center space-y-4">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <p className="text-primary font-medium">
-                    Traitement du PDF en cours...
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handleFileInput}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-purple-600" />
+                </div>
+                
+                <div>
+                  <button className="text-sm font-medium text-purple-600 hover:text-purple-700 underline">
+                    Cliquez pour télécharger
+                  </button>
+                  <span className="text-sm text-gray-500"> ou glissez-déposez</span>
+                  <p className="text-xs text-gray-400 mt-1">
+                    PDF, JPG, PNG, GIF (Taille max 5MB)
                   </p>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="w-16 h-16 bg-muted/30 rounded-2xl flex items-center justify-center mx-auto">
-                    <FileText className="w-8 h-8 text-muted-foreground" />
+              </div>
+            </div>
+
+            {/* Selected File Preview */}
+            {selectedFile && (
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-5 h-5 text-purple-600" />
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">
-                      Glissez-déposez votre PDF ici
-                    </h3>
-                    <p className="text-muted-foreground mb-4">
-                      ou cliquez pour sélectionner un fichier
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {selectedFile.name}
                     </p>
-                    <Button variant="outline" className="pointer-events-none">
-                      <Upload className="w-4 h-4 mr-2" />
-                      Choisir un fichier PDF
-                    </Button>
+                    <p className="text-xs text-gray-500">
+                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
                   </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedFile(null);
+                    }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
-              )}
-            </div>
-
-            <input
-              id="fileInput"
-              type="file"
-              accept="application/pdf"
-              onChange={handleFileInput}
-              className="hidden"
-            />
-          </CardContent>
-        </Card>
-
-        {/* Informations entreprise */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Building2 className="w-5 h-5" />
-              <span>Informations entreprise</span>
-            </CardTitle>
-            <CardDescription>
-              Ces informations seront utilisées pour personnaliser votre offre (optionnel)
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">
-                Nom de l'entreprise
-              </label>
-              <Input
-                type="text"
-                value={companyInfo.name}
-                onChange={(e) => setCompanyInfo({...companyInfo, name: e.target.value})}
-                placeholder="Nom de l'entreprise"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground flex items-center space-x-1">
-                  <Phone className="w-3 h-3" />
-                  <span>Téléphone</span>
-                </label>
-                <Input
-                  type="text"
-                  value={companyInfo.phone}
-                  onChange={(e) => setCompanyInfo({...companyInfo, phone: e.target.value})}
-                  placeholder="+33 1 23 45 67 89"
-                />
               </div>
+            )}
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground flex items-center space-x-1">
-                  <Mail className="w-3 h-3" />
-                  <span>Email</span>
-                </label>
-                <Input
-                  type="email"
-                  value={companyInfo.email}
-                  onChange={(e) => setCompanyInfo({...companyInfo, email: e.target.value})}
-                  placeholder="contact@entreprise.fr"
-                />
+            {/* Info Box */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex gap-3">
+                <Sparkles className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-medium text-purple-900 mb-1">Conversion par IA</h4>
+                  <p className="text-xs text-purple-700">
+                    Notre système extrait automatiquement le texte, les images et la structure de votre PDF. 
+                    Le contenu sera converti en format éditable que vous pourrez personnaliser dans l'éditeur.
+                  </p>
+                </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Instructions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <CheckCircle className="w-5 h-5" />
-            <span>Comment ça fonctionne ?</span>
-          </CardTitle>
-          <CardDescription>
-            Un processus simple pour convertir votre PDF en offre éditable
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto">
-                <span className="text-lg">1️⃣</span>
-              </div>
-              <h4 className="font-semibold text-sm">Uploadez votre PDF</h4>
-              <p className="text-xs text-muted-foreground">
-                Glissez-déposez ou sélectionnez votre fichier PDF d'offre
-              </p>
-            </div>
-            
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto">
-                <span className="text-lg">2️⃣</span>
-              </div>
-              <h4 className="font-semibold text-sm">Traitement automatique</h4>
-              <p className="text-xs text-muted-foreground">
-                Notre IA extrait le contenu et structure votre offre
-              </p>
-            </div>
-            
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto">
-                <span className="text-lg">3️⃣</span>
-              </div>
-              <h4 className="font-semibold text-sm">Édition libre</h4>
-              <p className="text-xs text-muted-foreground">
-                Modifiez et personnalisez votre offre dans l'éditeur visuel
-              </p>
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between pt-6">
+              <Button
+                variant="ghost"
+                onClick={() => window.history.back()}
+                className="text-gray-600"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={() => selectedFile && handleFileUpload(selectedFile)}
+                disabled={isLoading || !selectedFile}
+                className="bg-black hover:bg-gray-800 text-white px-6"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Conversion...
+                  </>
+                ) : (
+                  'Suivant'
+                )}
+              </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Bouton retour */}
-      <div className="flex justify-center">
-        <Button
-          variant="outline"
-          onClick={() => window.location.reload()}
-          className="flex items-center space-x-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Retour à l'accueil</span>
-        </Button>
+        </div>
       </div>
     </div>
   );
