@@ -11,7 +11,7 @@
     --card-foreground: 220 13% 18%;
     --popover: 0 0% 100%;
     --popover-foreground: 220 13% 18%;
-    --primary: 217 91% 60%;
+    --primary: 26 62% 40%;
     --primary-foreground: 0 0% 100%;
     --secondary: 220 14% 96%;
     --secondary-foreground: 220 13% 18%;
@@ -23,7 +23,7 @@
     --destructive-foreground: 0 0% 100%;
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 217 91% 60%;
+    --ring: 26 62% 40%;
     --radius: 1rem;
   }
 
@@ -34,7 +34,7 @@
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
+    --primary: 26 62% 50%;
     --primary-foreground: 222.2 84% 4.9%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -46,7 +46,7 @@
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
+    --ring: 26 62% 50%;
   }
 }
 
@@ -78,8 +78,8 @@
   --puck-color-grey-04: #ced4da;
   --puck-color-grey-05: #adb5bd;
   --puck-color-grey-06: #6c757d;
-  --puck-color-primary: #667eea;
-  --puck-color-primary-light: #7f92f0;
+  --puck-color-primary: #A75E27;
+  --puck-color-primary-light: #C17941;
 }
 
 .Puck-preview {
@@ -111,9 +111,9 @@
 }
 
 .Puck-input:focus, .Puck-textarea:focus {
-  border-color: #667eea !important;
+  border-color: #A75E27 !important;
   outline: none !important;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+  box-shadow: 0 0 0 3px rgba(167, 94, 39, 0.1) !important;
 }
 
 .Puck-button {
@@ -123,12 +123,12 @@
 }
 
 .Puck-button--primary {
-  background-color: #667eea !important;
+  background-color: #A75E27 !important;
   color: white !important;
 }
 
 .Puck-button--primary:hover {
-  background-color: #5568d3 !important;
+  background-color: #8B4E20 !important;
   transform: translateY(-1px) !important;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(167, 94, 39, 0.3) !important;
 }

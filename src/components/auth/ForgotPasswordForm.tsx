@@ -59,7 +59,7 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack }) => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#A75E27] focus:border-transparent"
             placeholder="votre@email.com"
           />
         </div>
@@ -67,7 +67,7 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack }) => {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full bg-[#A75E27] text-white py-3 px-4 rounded-lg hover:bg-[#8B4E20] focus:ring-2 focus:ring-[#A75E27] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isLoading ? (
             <div className="flex items-center justify-center">
@@ -84,7 +84,7 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack }) => {
         <div className="mt-6 text-center">
           <button
             onClick={onBack}
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            className="text-[#A75E27] hover:text-[#8B4E20] font-medium"
           >
             ← Retour à la connexion
           </button>

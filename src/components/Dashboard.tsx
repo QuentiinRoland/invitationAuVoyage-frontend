@@ -93,7 +93,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, isActive = false }) =
       description: 'Générez une offre personnalisée à partir de votre texte',
       icon: Plus,
       action: () => onNavigate('text-to-offer'),
-      color: 'bg-blue-500'
+      color: 'bg-[#A75E27]'
     },
     {
       title: 'Importer un PDF',
@@ -126,8 +126,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, isActive = false }) =
         <Card className="p-6">
           <div className="flex flex-row items-center justify-between space-y-0 mb-4">
             <div className="text-sm font-medium text-muted-foreground">Documents créés</div>
-            <div className="w-8 h-8 bg-blue-50 rounded-xl flex items-center justify-center">
-              <FileText className="h-4 w-4 text-blue-600" />
+            <div className="w-8 h-8 bg-[#A75E27]/10 rounded-xl flex items-center justify-center">
+              <FileText className="h-4 w-4 text-[#A75E27]" />
             </div>
           </div>
           <div className="text-3xl font-bold text-foreground mb-1">

@@ -646,8 +646,8 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
     <div className="space-y-6">
       {/* Indicateur mode démo */}
       {isUsingDemoData && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
-          <span className="text-blue-700 text-sm">
+        <div className="bg-[#A75E27]/10 border border-[#A75E27]/20 rounded-lg p-3 flex items-center gap-2">
+          <span className="text-[#A75E27] text-sm">
             💾 <strong>Mode Local</strong> : Vos modifications sont sauvegardées dans votre navigateur et persistent entre les sessions (API serveur non disponible)
           </span>
         </div>

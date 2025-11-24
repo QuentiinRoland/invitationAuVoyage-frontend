@@ -14,7 +14,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, fallback }) =
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#A75E27]"></div>
       </div>
     );
   }
@@ -41,7 +41,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, fallback }) =
             <div className="space-y-3">
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                className="w-full bg-[#A75E27] text-white py-3 px-4 rounded-lg hover:bg-[#8B4E20] transition-colors"
               >
                 Se connecter
               </button>
