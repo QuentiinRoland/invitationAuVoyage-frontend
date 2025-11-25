@@ -22,8 +22,6 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [statusMessage, setStatusMessage] = useState('');
   const companyInfo = {
     name: 'Invitation au Voyage',
     phone: '+33 1 23 45 67 89',
@@ -32,55 +30,11 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
     website: ''
   };
 
-  const pollJobStatus = async (jobId: string): Promise<any> => {
-    const maxAttempts = 120; // 2 minutes max (120 * 1s)
-    let attempts = 0;
-
-    while (attempts < maxAttempts) {
-      try {
-        const res = await fetch(`${apiBaseUrl}/pdf-job-status/${jobId}/`);
-        
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-
-        const jobData = await res.json();
-        console.log('📊 Job status:', jobData.status, jobData.progress + '%', jobData.message);
-        
-        // Mettre à jour le progress
-        if (jobData.progress !== undefined) {
-          setProgress(jobData.progress);
-        }
-        if (jobData.message) {
-          setStatusMessage(jobData.message);
-        }
-
-        if (jobData.status === 'completed') {
-          return jobData.result;
-        } else if (jobData.status === 'error') {
-          throw new Error(jobData.message || 'Erreur de traitement');
-        }
-
-        // Attendre 1 seconde avant le prochain poll
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        attempts++;
-      } catch (e: any) {
-        console.error('Erreur polling:', e);
-        throw e;
-      }
-    }
-
-    throw new Error('Timeout: Le traitement prend trop de temps');
-  };
-
   const handleFileUpload = async (file: File) => {
     if (!file) return;
 
     console.log('🚀 Début upload PDF:', file.name, file.size, 'bytes');
     setIsLoading(true);
-    setProgress(0);
-    setStatusMessage('Envoi du PDF...');
-    
     try {
       const form = new FormData();
       form.append('file', file);
@@ -99,48 +53,24 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
         console.error('❌ Erreur serveur:', errorText);
         throw new Error(`HTTP ${res.status}: ${errorText}`);
       }
-      
-      const initialData = await res.json();
-      
-      if (initialData.job_id) {
-        // Nouveau système asynchrone
-        console.log('🔄 Job créé:', initialData.job_id);
-        setStatusMessage('Traitement en cours...');
-        
-        // Attendre le résultat
-        const data = await pollJobStatus(initialData.job_id);
-        
-        console.log('📊 Données reçues:', {
-          titre: data.offer_structure?.title,
-          sections: data.offer_structure?.sections?.length,
-          images: data.assets?.length
-        });
+      const data = await res.json();
+      console.log('📊 Données reçues:', {
+        titre: data.offer_structure?.title,
+        sections: data.offer_structure?.sections?.length,
+        images: data.assets?.length
+      });
 
-        const dataToStore = {
-          offer_structure: data.offer_structure,
-          assets: data.assets,
-          company_info: data.company_info,
-          background_url: data.background_url,
-          logo_data_url: data.logo_data_url
-        };
-        console.log('💾 Données préparées pour l\'éditeur');
+      const dataToStore = {
+        offer_structure: data.offer_structure,
+        assets: data.assets,
+        company_info: data.company_info,
+        background_url: data.background_url,
+        logo_data_url: data.logo_data_url
+      };
+      console.log('💾 Données préparées pour l\'éditeur');
 
-        if (onNavigateToEditor) {
-          onNavigateToEditor(dataToStore);
-        }
-      } else {
-        // Ancien système (fallback pour compatibilité)
-        const dataToStore = {
-          offer_structure: initialData.offer_structure,
-          assets: initialData.assets,
-          company_info: initialData.company_info,
-          background_url: initialData.background_url,
-          logo_data_url: initialData.logo_data_url
-        };
-
-        if (onNavigateToEditor) {
-          onNavigateToEditor(dataToStore);
-        }
+      if (onNavigateToEditor) {
+        onNavigateToEditor(dataToStore);
       }
       
     } catch (e: any) {
@@ -148,8 +78,6 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
       alert(`❌ Erreur import: ${e.message}`);
     } finally {
       setIsLoading(false);
-      setProgress(0);
-      setStatusMessage('');
     }
   };
 
