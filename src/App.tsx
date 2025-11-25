@@ -28,14 +28,24 @@ function App() {
 
 
   const handleNavigateToEditor = (offerData?: any) => {
-    console.log('Navigation vers éditeur avec données:', offerData);
+    console.log('🎯 handleNavigateToEditor appelé avec:', offerData);
+    console.log('📊 Structure:', {
+      hasOfferStructure: !!offerData?.offer_structure,
+      hasAssets: !!offerData?.assets,
+      assetsCount: offerData?.assets?.length,
+      title: offerData?.offer_structure?.title
+    });
     
     if (offerData) {
       // Pass data directly via state instead of sessionStorage
       setEditorData(offerData);
+      console.log('✅ editorData mis à jour');
+    } else {
+      console.warn('⚠️ Aucune donnée fournie à handleNavigateToEditor');
     }
     setDocumentId(undefined); // Reset document ID pour les nouvelles données
     setActiveTab('offer-editor');
+    console.log('✅ Changement vers offer-editor');
   };
 
   const handleLoadDocument = (documentData: any) => {
@@ -43,6 +53,11 @@ function App() {
     setEditorData(documentData);
     setDocumentId(documentData.id);
     setActiveTab('offer-editor');
+  };
+
+  const checkForImportedData = () => {
+    // Fonction de fallback - retourne null si pas de données
+    return null;
   };
 
   // Check for imported data (no longer using sessionStorage)
@@ -97,9 +112,9 @@ function App() {
             {activeTab === 'offer-editor' && (
               <ProtectedRoute>
                 <OfferEditor 
-                  key={editorData ? Date.now() : 'default'}
+                  key={editorData ? JSON.stringify(editorData).substring(0, 50) : 'default'}
                   onSave={handleSaveOffer}
-                  prefilledData={editorData || checkForImportedData()}
+                  prefilledData={editorData}
                   documentId={documentId}
                 />
               </ProtectedRoute>
