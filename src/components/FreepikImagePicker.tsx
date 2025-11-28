@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { Search, X, Loader2, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { API_BASE_URL } from '../config/api';
 
 interface FreepikImagePickerProps {
   onSelectImage: (url: string) => void;
@@ -104,10 +105,9 @@ const FreepikImagePicker: React.FC<FreepikImagePickerProps> = ({ onSelectImage, 
     
     try {
       // Appel au backend proxy pour éviter les problèmes CORS
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       // Ajouter un timestamp pour éviter le cache
       const timestamp = Date.now();
-      const apiUrl = `${backendUrl}/api/freepik/search/?query=${encodeURIComponent(query)}&page=${page}&limit=30&_t=${timestamp}`;
+      const apiUrl = `${API_BASE_URL}/freepik/search/?query=${encodeURIComponent(query)}&page=${page}&limit=30&_t=${timestamp}`;
       
       console.log(`📡 Appel API: ${apiUrl}`);
       
