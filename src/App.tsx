@@ -55,11 +55,6 @@ function App() {
     setActiveTab('offer-editor');
   };
 
-  const checkForImportedData = () => {
-    // Fonction de fallback - retourne null si pas de données
-    return null;
-  };
-
   // Check for imported data (no longer using sessionStorage)
   const checkForImportedData = () => {
     // Data is now passed directly via props
