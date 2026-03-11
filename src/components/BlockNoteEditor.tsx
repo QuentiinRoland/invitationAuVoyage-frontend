@@ -441,7 +441,7 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
   // Titre du document (premier bloc H1)
   const getDocTitle = (): string => {
     const firstH1 = editor.document.find((b: any) => b.type === 'heading' && b.props?.level === 1);
-    const titleText = firstH1?.content?.map((c: any) => c.text).join('') || '';
+    const titleText = (firstH1?.content as any[])?.map((c: any) => c.text).join('') || '';
     return titleText || 'Document';
   };
 
