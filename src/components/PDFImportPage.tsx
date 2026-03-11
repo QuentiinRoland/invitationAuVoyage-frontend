@@ -62,10 +62,8 @@ const PDFImportPage: React.FC<PDFImportPageProps> = ({
 
       const dataToStore = {
         offer_structure: data.offer_structure,
-        assets: data.assets,
         company_info: data.company_info,
-        background_url: data.background_url,
-        logo_data_url: data.logo_data_url
+        document_id: data.document_id
       };
       console.log('💾 Données préparées pour l\'éditeur');
 

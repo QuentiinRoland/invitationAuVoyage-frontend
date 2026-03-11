@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Puck, Data, Config } from '@measured/puck';
+import { Puck, Data, Config, usePuck } from '@measured/puck';
 import '@measured/puck/puck.css';
 import { api } from '../api/client';
 import { API_BASE_URL } from '../config/api';
 import FreepikImagePicker from './FreepikImagePicker';
+import { useAuth } from '../contexts/SimpleAuthContext';
 
 // ===== HOOK POUR ÉDITION INLINE (comme Word) =====
 const useInlineEdit = (initialValue: string, onSave: (value: string) => void) => {
@@ -13,10 +14,25 @@ const useInlineEdit = (initialValue: string, onSave: (value: string) => void) =>
 
   useEffect(() => {
     setValue(initialValue);
+    // Mettre à jour le contenu du DOM si pas en cours d'édition
+    if (ref.current && !isEditing) {
+      ref.current.textContent = initialValue;
+    }
   }, [initialValue]);
 
-  const handleDoubleClick = () => {
+  const handleClick = () => {
     setIsEditing(true);
+    // Placer le curseur à la fin du texte
+    setTimeout(() => {
+      if (ref.current) {
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(ref.current);
+        range.collapse(false);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+    }, 0);
   };
 
   const handleBlur = () => {
@@ -44,13 +60,68 @@ const useInlineEdit = (initialValue: string, onSave: (value: string) => void) =>
     isEditing,
     value,
     handlers: {
-      onDoubleClick: handleDoubleClick,
+      onDoubleClick: handleClick,
       onBlur: handleBlur,
       onKeyDown: handleKeyDown,
       contentEditable: isEditing,
       suppressContentEditableWarning: true,
     },
   };
+};
+
+// ===== COMPOSANT INPUT HAUTEUR (avec état local pour éviter le blocage de frappe) =====
+const HeightInput = ({ value, onChange }: { value: number; onChange: (v: number) => void }) => {
+  const [inputVal, setInputVal] = useState(String(value || 300));
+
+  useEffect(() => {
+    setInputVal(String(value || 300));
+  }, [value]);
+
+  const commitValue = (str: string) => {
+    const v = parseInt(str, 10);
+    if (!isNaN(v) && v >= 50 && v <= 2000) {
+      onChange(v);
+    } else {
+      setInputVal(String(value || 300));
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <input
+        type="range"
+        min={50}
+        max={2000}
+        step={10}
+        value={value || 300}
+        onChange={(e) => {
+          const v = parseInt(e.target.value, 10);
+          onChange(v);
+          setInputVal(String(v));
+        }}
+        style={{ width: '100%' }}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <input
+          type="number"
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          onBlur={(e) => commitValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitValue((e.target as HTMLInputElement).value);
+          }}
+          style={{
+            width: '80px',
+            padding: '4px 8px',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            fontSize: '14px',
+          }}
+        />
+        <span style={{ fontSize: '12px', color: '#888' }}>{value || 300}px</span>
+      </div>
+    </div>
+  );
 };
 
 // ===== COMPOSANT CUSTOM POUR SÉLECTION D'IMAGE =====
@@ -167,20 +238,143 @@ const ImageUrlField = ({ value, onChange }: { value: string; onChange: (value: s
 
 // ===== COMPOSANTS PUCK AVEC ÉDITION INLINE =====
 
+// Utilitaire pour dispatching inline dans Puck
+const usePuckInlineUpdate = (id: string) => {
+  const { dispatch } = usePuck();
+  return (propName: string, value: string) => {
+    if (!id) return;
+    dispatch({
+      type: 'setData' as any,
+      data: (currentData: any) => ({
+        ...currentData,
+        content: currentData.content.map((item: any) =>
+          item.props.id === id
+            ? { ...item, props: { ...item.props, [propName]: value } }
+            : item
+        ),
+      }),
+    } as any);
+  };
+};
+
+// Utilitaire pour mettre à jour un item dans un tableau (paragraphes, features...)
+const usePuckArrayItemUpdate = (id: string) => {
+  const { dispatch } = usePuck();
+  return (arrayProp: string, index: number, itemKey: string, value: string) => {
+    if (!id) return;
+    dispatch({
+      type: 'setData' as any,
+      data: (currentData: any) => ({
+        ...currentData,
+        content: currentData.content.map((item: any) =>
+          item.props.id === id
+            ? {
+                ...item,
+                props: {
+                  ...item.props,
+                  [arrayProp]: item.props[arrayProp].map((arrItem: any, i: number) =>
+                    i === index ? { ...arrItem, [itemKey]: value } : arrItem
+                  ),
+                },
+              }
+            : item
+        ),
+      }),
+    } as any);
+  };
+};
+
+// Composant pour éditer un contenu multilignes inline (body text)
+const EditableContent = ({
+  content,
+  onSave,
+  style = {},
+}: {
+  content: string;
+  onSave: (value: string) => void;
+  style?: React.CSSProperties;
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const startEdit = () => {
+    setIsEditing(true);
+    setTimeout(() => {
+      if (ref.current) {
+        ref.current.innerText = content;
+        ref.current.focus();
+        const range = document.createRange();
+        range.selectNodeContents(ref.current);
+        range.collapse(false);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+      }
+    }, 0);
+  };
+
+  const handleBlur = () => {
+    if (ref.current) {
+      const newContent = ref.current.innerText;
+      if (newContent !== content) onSave(newContent);
+    }
+    setIsEditing(false);
+  };
+
+  const baseStyle: React.CSSProperties = {
+    fontSize: '15px',
+    lineHeight: '1.8',
+    color: '#34495e',
+    whiteSpace: 'pre-wrap',
+    borderRadius: '4px',
+    transition: 'outline 0.15s',
+    ...style,
+  };
+
+  if (isEditing) {
+    return (
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={handleBlur}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            if (ref.current) ref.current.innerText = content;
+            ref.current?.blur();
+          }
+        }}
+        style={{ ...baseStyle, outline: '2px solid #667eea', padding: '4px', cursor: 'text', minHeight: '20px' }}
+      />
+    );
+  }
+
+  return (
+    <div
+      onDoubleClick={startEdit}
+      title="✏️ Double-cliquez pour éditer"
+      style={{ ...baseStyle, cursor: 'text', outline: '1px dashed transparent' }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.outline = '1px dashed #a5b4fc'; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.outline = '1px dashed transparent'; }}
+      dangerouslySetInnerHTML={{ __html: content ? content.replace(/\n/g, '<br/>') : '<span style="color:#aaa;font-style:italic">Double-cliquez pour écrire...</span>' }}
+    />
+  );
+};
+
 // 1. Hero - En-tête d'offre (ÉDITABLE INLINE)
 type HeroProps = {
+  id?: string;
   title?: string;
   subtitle?: string;
   align?: 'left' | 'center' | 'right';
-  onChange?: (field: string, value: string) => void;
 }
 
-const Hero = ({ title = '', subtitle = '', align = 'left', onChange }: HeroProps) => {
-  const titleEdit = useInlineEdit(title, (newValue) => onChange?.('title', newValue));
-  const subtitleEdit = useInlineEdit(subtitle, (newValue) => onChange?.('subtitle', newValue));
+const Hero = ({ id = '', title = '', subtitle = '', align = 'left' }: HeroProps) => {
+  const updateProp = usePuckInlineUpdate(id);
+  const titleEdit = useInlineEdit(title, (newValue) => updateProp('title', newValue));
+  const subtitleEdit = useInlineEdit(subtitle, (newValue) => updateProp('subtitle', newValue));
 
   return (
-    <div 
+    <div
       style={{
         padding: '10px 0 20px 0',
         textAlign: align,
@@ -188,12 +382,12 @@ const Hero = ({ title = '', subtitle = '', align = 'left', onChange }: HeroProps
         borderBottom: '3px solid #667eea',
       }}
     >
-      <h1 
+      <h1
         ref={titleEdit.ref}
         {...titleEdit.handlers}
-        style={{ 
-          fontSize: '38px', 
-          fontWeight: 'bold', 
+        style={{
+          fontSize: '38px',
+          fontWeight: 'bold',
           margin: '0 0 8px 0',
           fontFamily: 'Georgia, serif',
           color: '#2c3e50',
@@ -203,15 +397,15 @@ const Hero = ({ title = '', subtitle = '', align = 'left', onChange }: HeroProps
           cursor: titleEdit.isEditing ? 'text' : 'pointer',
           transition: 'all 0.2s',
         }}
-        title="Double-cliquez pour éditer"
+        title="✏️ Double-cliquez pour éditer"
       >
         {title}
       </h1>
-      <p 
+      <p
         ref={subtitleEdit.ref}
         {...subtitleEdit.handlers}
-        style={{ 
-          fontSize: '17px', 
+        style={{
+          fontSize: '17px',
           margin: 0,
           color: '#7f8c8d',
           outline: subtitleEdit.isEditing ? '2px solid #667eea' : 'none',
@@ -220,7 +414,7 @@ const Hero = ({ title = '', subtitle = '', align = 'left', onChange }: HeroProps
           cursor: subtitleEdit.isEditing ? 'text' : 'pointer',
           transition: 'all 0.2s',
         }}
-        title="Double-cliquez pour éditer"
+        title="✏️ Double-cliquez pour éditer"
       >
         {subtitle}
       </p>
@@ -230,37 +424,47 @@ const Hero = ({ title = '', subtitle = '', align = 'left', onChange }: HeroProps
 
 // 2. TravelSection - Section de voyage simple (sans background)
 type TravelSectionProps = {
+  id?: string;
   title?: string;
   content?: string;
 }
 
-const TravelSection = ({ 
-  title = '', 
+const TravelSection = ({
+  id = '',
+  title = '',
   content = '',
 }: TravelSectionProps) => {
+  const updateProp = usePuckInlineUpdate(id);
+  const titleEdit = useInlineEdit(title, (newValue) => updateProp('title', newValue));
+
   return (
     <div style={{
       padding: '20px 0',
       marginBottom: '20px',
       borderBottom: '1px solid #e0e0e0',
     }}>
-      <h2 style={{ 
-        fontSize: '24px', 
-        fontWeight: 'bold', 
-        margin: '0 0 12px 0',
-        color: '#2c3e50',
-        fontFamily: 'Georgia, serif',
-      }}>
+      <h2
+        ref={titleEdit.ref}
+        {...titleEdit.handlers}
+        style={{
+          fontSize: '24px',
+          fontWeight: 'bold',
+          margin: '0 0 12px 0',
+          color: '#2c3e50',
+          fontFamily: 'Georgia, serif',
+          outline: titleEdit.isEditing ? '2px solid #667eea' : 'none',
+          padding: titleEdit.isEditing ? '4px' : '0',
+          borderRadius: '4px',
+          cursor: titleEdit.isEditing ? 'text' : 'pointer',
+          transition: 'all 0.2s',
+        }}
+        title="✏️ Double-cliquez pour éditer le titre"
+      >
         {title}
       </h2>
-      <div 
-        style={{ 
-          fontSize: '15px', 
-          lineHeight: '1.8',
-          color: '#34495e',
-          whiteSpace: 'pre-wrap',
-        }}
-        dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }}
+      <EditableContent
+        content={content}
+        onSave={(v) => updateProp('content', v)}
       />
     </div>
   );
@@ -268,18 +472,33 @@ const TravelSection = ({
 
 // 3. PriceCard - Carte de prix (simple, sans background)
 type PriceCardProps = {
+  id?: string;
   title?: string;
   price?: string;
   currency?: string;
   features?: string[];
 }
 
-const PriceCard = ({ 
-  title = '', 
-  price = '', 
+const PriceCard = ({
+  id = '',
+  title = '',
+  price = '',
   currency = '€',
   features = [],
 }: PriceCardProps) => {
+  const updateProp = usePuckInlineUpdate(id);
+  const titleEdit = useInlineEdit(title, (v) => updateProp('title', v));
+  const priceEdit = useInlineEdit(price, (v) => updateProp('price', v));
+
+  const inlineStyle = (isEditing: boolean): React.CSSProperties => ({
+    outline: isEditing ? '2px solid #667eea' : 'none',
+    padding: isEditing ? '2px 6px' : '0',
+    borderRadius: '4px',
+    cursor: isEditing ? 'text' : 'pointer',
+    transition: 'all 0.2s',
+    display: 'inline-block',
+  });
+
   return (
     <div style={{
       padding: '30px 0',
@@ -288,23 +507,36 @@ const PriceCard = ({
       textAlign: 'center',
       marginBottom: '20px',
     }}>
-      <h3 style={{ 
-        fontSize: '24px', 
-        fontWeight: 'bold', 
-        marginBottom: '15px',
-        fontFamily: 'Georgia, serif',
-        color: '#2c3e50',
-      }}>
+      <h3
+        ref={titleEdit.ref}
+        {...titleEdit.handlers}
+        style={{
+          fontSize: '24px',
+          fontWeight: 'bold',
+          marginBottom: '15px',
+          fontFamily: 'Georgia, serif',
+          color: '#2c3e50',
+          ...inlineStyle(titleEdit.isEditing),
+        }}
+        title="✏️ Double-cliquez pour éditer le titre"
+      >
         {title}
       </h3>
       <div style={{ marginBottom: '20px' }}>
-        <span style={{ fontSize: '42px', fontWeight: 'bold', color: '#667eea' }}>{price}</span>
+        <span
+          ref={priceEdit.ref}
+          {...priceEdit.handlers}
+          style={{ fontSize: '42px', fontWeight: 'bold', color: '#667eea', ...inlineStyle(priceEdit.isEditing) }}
+          title="✏️ Double-cliquez pour éditer le prix"
+        >
+          {price}
+        </span>
         <span style={{ fontSize: '20px', marginLeft: '5px', color: '#667eea' }}>{currency}</span>
       </div>
       {features.length > 0 && (
-        <ul style={{ 
-          listStyle: 'none', 
-          padding: 0, 
+        <ul style={{
+          listStyle: 'none',
+          padding: 0,
           textAlign: 'left',
           fontSize: '15px',
           lineHeight: '2',
@@ -313,13 +545,36 @@ const PriceCard = ({
           margin: '0 auto',
         }}>
           {features.map((feature, idx) => (
-            <li key={idx} style={{ marginBottom: '8px' }}>
-              ✓ {feature}
-            </li>
+            <PriceFeatureItem key={idx} id={id} index={idx} feature={feature} />
           ))}
         </ul>
       )}
     </div>
+  );
+};
+
+// Sub-composant pour chaque feature éditable
+const PriceFeatureItem = ({ id, index, feature }: { id: string; index: number; feature: string }) => {
+  const updateArrayItem = usePuckArrayItemUpdate(id);
+  const featureEdit = useInlineEdit(feature, (v) => updateArrayItem('features', index, 'feature', v));
+  return (
+    <li style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <span style={{ color: '#667eea', fontWeight: 'bold' }}>✓</span>
+      <span
+        ref={featureEdit.ref}
+        {...featureEdit.handlers}
+        style={{
+          outline: featureEdit.isEditing ? '2px solid #667eea' : 'none',
+          padding: featureEdit.isEditing ? '1px 4px' : '0',
+          borderRadius: '3px',
+          cursor: featureEdit.isEditing ? 'text' : 'pointer',
+          flex: 1,
+        }}
+        title="✏️ Double-cliquez pour éditer"
+      >
+        {feature}
+      </span>
+    </li>
   );
 };
 
@@ -468,6 +723,7 @@ const ImageGallery = ({ images = [], columns = 3 }: ImageGalleryProps) => {
 
 // 6. TextBlock - Bloc de texte simple
 type TextBlockProps = {
+  id?: string;
   content?: string;
   fontSize?: number;
   textAlign?: 'left' | 'center' | 'right' | 'justify';
@@ -477,38 +733,73 @@ type TextBlockProps = {
   borderRadius?: number;
 }
 
-const TextBlock = ({ 
-  content = '', 
+const TextBlock = ({
+  id = '',
+  content = '',
   fontSize = 16,
   textAlign = 'justify',
   backgroundColor = 'transparent',
   textColor = '#34495e',
   padding = 0,
-  borderRadius = 0
+  borderRadius = 0,
 }: TextBlockProps) => {
   const hasBackground = backgroundColor !== 'transparent' && backgroundColor !== '';
-  
+  const [isEditing, setIsEditing] = useState(false);
+  const editRef = useRef<HTMLDivElement>(null);
+  const updateProp = usePuckInlineUpdate(id);
+
+  const handleBlur = () => {
+    setIsEditing(false);
+    if (editRef.current) {
+      const newContent = editRef.current.innerText;
+      if (newContent !== content) {
+        updateProp('content', newContent);
+      }
+    }
+  };
+
   return (
-    <div 
-      style={{ 
-        fontSize: `${fontSize}px`, 
+    <div
+      ref={editRef}
+      onDoubleClick={() => setIsEditing(true)}
+      onBlur={handleBlur}
+      contentEditable={isEditing}
+      suppressContentEditableWarning
+      style={{
+        fontSize: `${fontSize}px`,
         lineHeight: '1.8',
         textAlign,
         marginBottom: '20px',
         color: textColor,
         whiteSpace: 'pre-wrap',
         backgroundColor: hasBackground ? backgroundColor : 'transparent',
-        padding: hasBackground ? `${padding}px` : 0,
+        padding: hasBackground ? `${padding}px` : `${padding}px`,
         borderRadius: hasBackground ? `${borderRadius}px` : 0,
         boxShadow: hasBackground ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
+        outline: isEditing ? '2px solid #667eea' : '1px dashed transparent',
+        cursor: isEditing ? 'text' : 'pointer',
+        transition: 'outline 0.2s',
+        minHeight: '40px',
+        position: 'relative' as const,
       }}
-      dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }}
-    />
+      title="Double-cliquez pour éditer"
+    >
+      {content.split('\n').map((line, i) => (
+        <React.Fragment key={i}>
+          {line}
+          {i < content.split('\n').length - 1 && <br />}
+        </React.Fragment>
+      ))}
+      {!isEditing && !content && (
+        <span style={{ color: '#aaa', fontStyle: 'italic' }}>Cliquez pour écrire...</span>
+      )}
+    </div>
   );
 };
 
 // 7. CalloutBox - Titre surligné (highlight style) - VERSION SIMPLE
 type CalloutBoxProps = {
+  id?: string;
   title?: string;
   content?: string;
   titleBackgroundColor?: string;
@@ -516,11 +807,15 @@ type CalloutBoxProps = {
 }
 
 const CalloutBox = ({
+  id = '',
   title = 'Titre important',
   content = 'Votre contenu ici...',
   titleBackgroundColor = '#667eea',
   titleTextColor = '#ffffff',
 }: CalloutBoxProps) => {
+  const updateProp = usePuckInlineUpdate(id);
+  const titleEdit = useInlineEdit(title, (newValue) => updateProp('title', newValue));
+
   return (
     <div style={{
       marginBottom: '25px',
@@ -535,25 +830,28 @@ const CalloutBox = ({
         marginBottom: '12px',
         boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
       }}>
-        <h3 style={{
-          fontSize: '22px',
-          fontWeight: 'bold',
-          margin: 0,
-          fontFamily: 'Georgia, serif',
-        }}>
+        <h3
+          ref={titleEdit.ref}
+          {...titleEdit.handlers}
+          style={{
+            fontSize: '22px',
+            fontWeight: 'bold',
+            margin: 0,
+            fontFamily: 'Georgia, serif',
+            outline: titleEdit.isEditing ? '2px solid rgba(255,255,255,0.8)' : 'none',
+            borderRadius: '3px',
+            cursor: titleEdit.isEditing ? 'text' : 'pointer',
+          }}
+          title="✏️ Double-cliquez pour éditer le titre"
+        >
           {title}
         </h3>
       </div>
-      
-      {/* Contenu sans fond */}
-      <div style={{
-        color: '#34495e',
-        padding: '0',
-        fontSize: '15px',
-        lineHeight: '1.8',
-        whiteSpace: 'pre-wrap',
-      }}
-        dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }}
+
+      {/* Contenu éditable */}
+      <EditableContent
+        content={content}
+        onSave={(v) => updateProp('content', v)}
       />
     </div>
   );
@@ -561,6 +859,7 @@ const CalloutBox = ({
 
 // 8. RichCalloutBox - CalloutBox AVANCÉ avec paragraphes éditables individuellement ✨ NOUVEAU
 type RichCalloutBoxProps = {
+  id?: string;
   title?: string;
   paragraphs?: { text: string }[];
   titleBackgroundColor?: string;
@@ -568,11 +867,15 @@ type RichCalloutBoxProps = {
 }
 
 const RichCalloutBox = ({
+  id = '',
   title = 'Titre important',
   paragraphs = [{ text: 'Paragraphe 1' }],
   titleBackgroundColor = '#667eea',
   titleTextColor = '#ffffff',
 }: RichCalloutBoxProps) => {
+  const updateProp = usePuckInlineUpdate(id);
+  const titleEdit = useInlineEdit(title, (newValue) => updateProp('title', newValue));
+
   return (
     <div style={{
       marginBottom: '25px',
@@ -587,32 +890,57 @@ const RichCalloutBox = ({
         marginBottom: '12px',
         boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
       }}>
-        <h3 style={{
-          fontSize: '22px',
-          fontWeight: 'bold',
-          margin: 0,
-          fontFamily: 'Georgia, serif',
-        }}>
+        <h3
+          ref={titleEdit.ref}
+          {...titleEdit.handlers}
+          style={{
+            fontSize: '22px',
+            fontWeight: 'bold',
+            margin: 0,
+            fontFamily: 'Georgia, serif',
+            outline: titleEdit.isEditing ? '2px solid rgba(255,255,255,0.8)' : 'none',
+            borderRadius: '3px',
+            cursor: titleEdit.isEditing ? 'text' : 'pointer',
+          }}
+          title="✏️ Double-cliquez pour éditer le titre"
+        >
           {title}
         </h3>
       </div>
-      
+
       {/* Paragraphes éditables individuellement */}
-      <div style={{
-        color: '#34495e',
-        fontSize: '15px',
-        lineHeight: '1.8',
-      }}>
+      <div style={{ color: '#34495e', fontSize: '15px', lineHeight: '1.8' }}>
         {paragraphs.map((para, idx) => (
-          <p key={idx} style={{
-            marginBottom: '12px',
-            whiteSpace: 'pre-wrap',
-          }}>
-            {para.text}
-          </p>
+          <RichParagraph key={idx} id={id} index={idx} text={para.text} />
         ))}
       </div>
     </div>
+  );
+};
+
+// Sub-composant pour chaque paragraphe éditable
+const RichParagraph = ({ id, index, text }: { id: string; index: number; text: string }) => {
+  const updateArrayItem = usePuckArrayItemUpdate(id);
+  const edit = useInlineEdit(text, (v) => updateArrayItem('paragraphs', index, 'text', v));
+  return (
+    <p
+      ref={edit.ref}
+      {...edit.handlers}
+      style={{
+        marginBottom: '10px',
+        whiteSpace: 'pre-wrap',
+        outline: edit.isEditing ? '2px solid #667eea' : '1px dashed transparent',
+        padding: edit.isEditing ? '3px 6px' : '2px',
+        borderRadius: '3px',
+        cursor: edit.isEditing ? 'text' : 'pointer',
+        transition: 'outline 0.15s',
+      }}
+      onMouseEnter={(e) => { if (!edit.isEditing) (e.currentTarget as HTMLParagraphElement).style.outline = '1px dashed #a5b4fc'; }}
+      onMouseLeave={(e) => { if (!edit.isEditing) (e.currentTarget as HTMLParagraphElement).style.outline = '1px dashed transparent'; }}
+      title="✏️ Double-cliquez pour éditer"
+    >
+      {text}
+    </p>
   );
 };
 
@@ -678,18 +1006,35 @@ const Divider = ({
 
 // 11. ContactInfo - Informations de contact (simple)
 type ContactInfoProps = {
+  id?: string;
   companyName?: string;
   phone?: string;
   email?: string;
   address?: string;
 }
 
-const ContactInfo = ({ 
-  companyName = '', 
-  phone, 
-  email, 
-  address 
+const ContactInfo = ({
+  id = '',
+  companyName = '',
+  phone = '',
+  email = '',
+  address = '',
 }: ContactInfoProps) => {
+  const updateProp = usePuckInlineUpdate(id);
+  const nameEdit = useInlineEdit(companyName, (v) => updateProp('companyName', v));
+  const phoneEdit = useInlineEdit(phone, (v) => updateProp('phone', v));
+  const emailEdit = useInlineEdit(email, (v) => updateProp('email', v));
+  const addressEdit = useInlineEdit(address, (v) => updateProp('address', v));
+
+  const fieldStyle = (isEditing: boolean): React.CSSProperties => ({
+    outline: isEditing ? '2px solid #667eea' : 'none',
+    padding: isEditing ? '1px 6px' : '0',
+    borderRadius: '3px',
+    cursor: isEditing ? 'text' : 'pointer',
+    display: 'inline-block',
+    minWidth: '20px',
+  });
+
   return (
     <div style={{
       padding: '30px 0',
@@ -697,19 +1042,37 @@ const ContactInfo = ({
       textAlign: 'center',
       borderTop: '2px solid #2c3e50',
     }}>
-      <h3 style={{ 
-        fontSize: '22px', 
-        fontWeight: 'bold', 
-        marginBottom: '15px',
-        fontFamily: 'Georgia, serif',
-        color: '#2c3e50',
-      }}>
+      <h3
+        ref={nameEdit.ref}
+        {...nameEdit.handlers}
+        style={{
+          fontSize: '22px',
+          fontWeight: 'bold',
+          marginBottom: '15px',
+          fontFamily: 'Georgia, serif',
+          color: '#2c3e50',
+          ...fieldStyle(nameEdit.isEditing),
+        }}
+        title="✏️ Double-cliquez pour éditer"
+      >
         {companyName}
       </h3>
       <div style={{ fontSize: '15px', lineHeight: '2', color: '#34495e' }}>
-        {phone && <div>📞 {phone}</div>}
-        {email && <div>✉️ {email}</div>}
-        {address && <div>📍 {address}</div>}
+        {(phone !== undefined) && (
+          <div>
+            📞 <span ref={phoneEdit.ref} {...phoneEdit.handlers} style={fieldStyle(phoneEdit.isEditing)} title="✏️ Double-cliquez pour éditer">{phone}</span>
+          </div>
+        )}
+        {(email !== undefined) && (
+          <div>
+            ✉️ <span ref={emailEdit.ref} {...emailEdit.handlers} style={fieldStyle(emailEdit.isEditing)} title="✏️ Double-cliquez pour éditer">{email}</span>
+          </div>
+        )}
+        {(address !== undefined) && (
+          <div>
+            📍 <span ref={addressEdit.ref} {...addressEdit.handlers} style={fieldStyle(addressEdit.isEditing)} title="✏️ Double-cliquez pour éditer">{address}</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -796,8 +1159,9 @@ const config: Config = {
         features: [],
       },
       render: (props: any) => (
-        <PriceCard 
-          {...props} 
+        <PriceCard
+          {...props}
+          id={props.id}
           features={props.features?.map((f: any) => f.feature) || []}
         />
       ),
@@ -817,16 +1181,44 @@ const config: Config = {
           label: '📝 Légende (optionnel)',
         },
         height: {
-          type: 'number',
+          type: 'custom',
           label: '📏 Hauteur (px)',
-          min: 100,
-          max: 800,
+          render: ({ value, onChange }) => (
+            <HeightInput value={value} onChange={onChange} />
+          ),
         },
         borderRadius: {
-          type: 'number',
+          type: 'custom',
           label: '🔲 Arrondi des coins (px)',
-          min: 0,
-          max: 30,
+          render: ({ value, onChange }) => (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="range"
+                min={0}
+                max={30}
+                value={value || 0}
+                onChange={(e) => onChange(parseInt(e.target.value, 10))}
+                style={{ flex: 1 }}
+              />
+              <input
+                type="number"
+                min={0}
+                max={30}
+                value={value || 0}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (!isNaN(v)) onChange(Math.min(30, Math.max(0, v)));
+                }}
+                style={{
+                  width: '60px',
+                  padding: '4px 8px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+          ),
         },
       },
       defaultProps: {
@@ -1133,7 +1525,7 @@ const config: Config = {
         email: 'contact@invitationauvoyage.fr',
         address: 'Paris, France',
       },
-      render: ContactInfo as any,
+      render: (props: any) => <ContactInfo {...props} id={props.id} />,
     },
   },
 };
@@ -1452,11 +1844,13 @@ interface PuckEditorProps {
   onSave?: (data: any) => void;
 }
 
-const PuckEditor: React.FC<PuckEditorProps> = ({ 
+const PuckEditor: React.FC<PuckEditorProps> = ({
   prefilledData,
   documentId,
-  onSave 
+  onSave
 }) => {
+  const { user } = useAuth();
+
   // Initialiser avec les données converties si disponibles, sinon utiliser initialData
   const [data, setData] = useState<Data>(() => {
     console.log('🎬 Initialisation PuckEditor avec:', prefilledData);
@@ -1484,6 +1878,7 @@ const PuckEditor: React.FC<PuckEditorProps> = ({
   });
   
   const [isLoading, setIsLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showJsonPreview, setShowJsonPreview] = useState(false);
   const [showDesignPanel, setShowDesignPanel] = useState(false);
   const [globalBackground, setGlobalBackground] = useState({
@@ -1527,13 +1922,65 @@ const PuckEditor: React.FC<PuckEditorProps> = ({
     }
   }, [prefilledData]);
 
+  // Trouver le dossier de l'utilisateur connecté
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const findFolderIdForUser = (folders: any[]): number | undefined => {
+    if (!user || !folders?.length) return undefined;
+    const candidates: string[] = [];
+    if (user.first_name) candidates.push(user.first_name.toLowerCase());
+    if (user.last_name) candidates.push(user.last_name.toLowerCase());
+    if (user.username) {
+      const emailPrefix = user.username.split('@')[0].toLowerCase();
+      if (emailPrefix) candidates.push(emailPrefix);
+    }
+    if (user.email) {
+      const emailPrefix = user.email.split('@')[0].toLowerCase();
+      if (emailPrefix && !candidates.includes(emailPrefix)) candidates.push(emailPrefix);
+    }
+    console.log('🔍 Recherche dossier pour candidates:', candidates, 'dans dossiers:', folders.map((f: any) => f.name));
+    const folder = folders.find((f: any) =>
+      candidates.some(name => name && f.name.toLowerCase().includes(name))
+    );
+    console.log('📁 Dossier trouvé:', folder?.name, '(id:', folder?.id, ')');
+    return folder?.id;
+  };
+
   // Sauvegarder le document
   const handleSave = async () => {
     setIsLoading(true);
     try {
       const title = data.content.find((c: any) => c.type === 'Hero')?.props?.title || 'Document Puck';
-      
-      const saveData = {
+
+      // Récupérer les dossiers depuis l'API
+      let folderId: number | undefined;
+      try {
+        const foldersResp = await api.get('api/folders/');
+        const allFolders: any[] = [];
+        const flattenList = (list: any[]) => {
+          list.forEach((f: any) => {
+            allFolders.push(f);
+            if (f.subfolders?.length) flattenList(f.subfolders);
+          });
+        };
+        flattenList(foldersResp.data || []);
+        console.log('📁 Dossiers récupérés:', allFolders.map((f: any) => `${f.name} (id:${f.id})`));
+        console.log('👤 User:', { username: user?.username, email: user?.email, first_name: user?.first_name });
+        folderId = findFolderIdForUser(allFolders);
+        console.log('📂 FolderId sélectionné:', folderId);
+      } catch (folderErr) {
+        console.warn('⚠️ Impossible de récupérer les dossiers:', folderErr);
+        // Fallback: localStorage
+        try {
+          const saved = localStorage.getItem('demo_folders');
+          if (saved) folderId = findFolderIdForUser(JSON.parse(saved));
+        } catch {}
+      }
+
+      const saveData: any = {
         title,
         description: `Document Puck créé le ${new Date().toLocaleDateString('fr-FR')}`,
         document_type: 'puck_project',
@@ -1543,19 +1990,28 @@ const PuckEditor: React.FC<PuckEditorProps> = ({
         offer_structure: prefilledData?.offer_structure || null,
       };
 
-      console.log('💾 Sauvegarde Puck (avec background + header/footer):', saveData);
+      if (folderId !== undefined) {
+        saveData.folder_id = folderId;
+      }
 
       const response = await api.post('api/documents/', saveData);
       const result = response.data;
 
-      alert(`✅ Document "${title}" sauvegardé avec succès ! (ID: ${result.id})`);
-      
+      // Invalider le cache localStorage
+      localStorage.removeItem('demo_documents');
+      localStorage.removeItem('demo_data_timestamp');
+
+      const folderMsg = folderId ? ` dans votre dossier` : ' (sans dossier — vérifiez la console)';
+      const msg = `✅ Document "${title}" sauvegardé${folderMsg} !`;
+      window.alert(msg);
+
       if (onSave) {
         onSave({ puck_data: data, documentId: result.id });
       }
     } catch (error: any) {
       console.error('❌ Erreur sauvegarde:', error);
-      alert(`❌ Erreur: ${error.response?.data?.detail || error.message}`);
+      const msg = error?.detail || error?.message || 'Erreur inconnue';
+      window.alert(`❌ Erreur lors de la sauvegarde : ${msg}`);
     } finally {
       setIsLoading(false);
     }
@@ -1968,6 +2424,35 @@ const PuckEditor: React.FC<PuckEditorProps> = ({
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Toast de notification */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 9999,
+          backgroundColor: toast.type === 'success' ? '#27ae60' : '#e74c3c',
+          color: 'white',
+          padding: '14px 20px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+          fontSize: '14px',
+          fontWeight: '500',
+          maxWidth: '360px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+        }}>
+          <span>{toast.type === 'success' ? '✅' : '❌'}</span>
+          <span>{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', marginLeft: 'auto', fontSize: '16px', lineHeight: 1 }}
+          >×</button>
+        </div>
+      )}
+
       {/* Barre d'outils personnalisée */}
       <div style={{
         backgroundColor: '#2c3e50',

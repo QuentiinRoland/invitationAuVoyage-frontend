@@ -3,7 +3,7 @@ import "./App.css";
 import AskOnceForm from "./components/PdfReaderForm";
 import TextToOfferForm from "./components/TextToOfferForm";
 // import OfferEditor from "./components/CraftJSEditor";
-import OfferEditor from "./components/PuckEditor";
+import OfferEditor from "./components/BlockNoteEditor";
 import PDFReformatter from "./components/PDFReformatter";
 import PDFImportPage from "./components/PDFImportPage";
 import DocumentLibrary from "./components/ModernDocumentLibrary";
@@ -106,8 +106,8 @@ function App() {
             )}
             {activeTab === 'offer-editor' && (
               <ProtectedRoute>
-                <OfferEditor 
-                  key={editorData ? JSON.stringify(editorData).substring(0, 50) : 'default'}
+                <OfferEditor
+                  key={documentId ? `doc-${documentId}` : (editorData ? `import-${editorData.document_id || editorData.offer_structure?.title || Date.now()}` : 'default')}
                   onSave={handleSaveOffer}
                   prefilledData={editorData}
                   documentId={documentId}

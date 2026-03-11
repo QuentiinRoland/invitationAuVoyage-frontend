@@ -51,6 +51,7 @@ interface Folder {
   created_at: string;
   updated_at: string;
   parent_id?: number;
+  subfolders?: Folder[];
 }
 
 interface DocumentLibraryProps {
@@ -79,16 +80,19 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
   const [newFolderIcon, setNewFolderIcon] = useState('📁');
   const [newFolderColor, setNewFolderColor] = useState('#3B82F6');
   const [isUsingDemoData, setIsUsingDemoData] = useState(false);
+  const [draggingDocId, setDraggingDocId] = useState<number | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<number | null>(null);
+  const foldersLoadingRef = React.useRef(false);
 
   // Charger les dossiers et documents UNE SEULE FOIS au montage
   useEffect(() => {
     // Vérifier si nous devons forcer une réinitialisation (nouvelle structure de dossiers)
     const currentVersion = localStorage.getItem('folders_version');
-    if (currentVersion !== '2.0') {
-      console.log('🔄 Nouvelle structure de dossiers détectée - réinitialisation...');
+    if (currentVersion !== '4.0') {
       localStorage.removeItem('demo_folders');
       localStorage.removeItem('demo_documents');
-      localStorage.setItem('folders_version', '2.0');
+      localStorage.removeItem('demo_data_timestamp');
+      localStorage.setItem('folders_version', '4.0');
     }
     
     loadFolders();
@@ -146,68 +150,50 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
     }
   }, [isActive]);
 
+  const DEFAULT_FOLDERS = [
+    { name: 'Dossier de Denis',    description: 'Documents et projets de Denis',    color: '#3B82F6', icon: '👤', position: 0 },
+    { name: 'Dossier de Sandrine', description: 'Documents et projets de Sandrine', color: '#10B981', icon: '👤', position: 1 },
+    { name: 'Dossier de Maïté',    description: 'Documents et projets de Maïté',    color: '#F59E0B', icon: '👤', position: 2 },
+    { name: 'Dossier Commun',      description: 'Documents partagés et communs',    color: '#8B5CF6', icon: '📂', position: 3 },
+  ];
+
   const loadFolders = async () => {
-    // Essayer de charger depuis localStorage d'abord
-    const savedFolders = localStorage.getItem('demo_folders');
-    if (savedFolders) {
-      console.log('📦 Chargement des dossiers depuis localStorage');
-      try {
-        const parsedFolders = JSON.parse(savedFolders);
-        setFolders(parsedFolders);
-        return;
-      } catch (e) {
-        console.error('Erreur lors du parsing de localStorage:', e);
-        localStorage.removeItem('demo_folders');
+    if (foldersLoadingRef.current) return;
+    foldersLoadingRef.current = true;
+    try {
+      // Toujours charger depuis l'API
+      const response = await api.get('api/folders/');
+      let apiFolders: Folder[] = response.data;
+
+      // Créer uniquement les dossiers par défaut manquants
+      const missingFolders = DEFAULT_FOLDERS.filter(def =>
+        !apiFolders.some(f => f.name === def.name)
+      );
+      if (missingFolders.length > 0) {
+        console.log('📁 Création des dossiers manquants:', missingFolders.map(f => f.name));
+        for (const def of missingFolders) {
+          await api.post('api/folders/', def);
+        }
+        const refreshed = await api.get('api/folders/');
+        apiFolders = refreshed.data;
       }
+
+      // Aplatir la hiérarchie pour le localStorage (getUserFolderId en a besoin)
+      const flatten = (folders: any[]): any[] =>
+        folders.flatMap(f => [f, ...flatten(f.subfolders || [])]);
+      const flat = flatten(apiFolders);
+
+      setFolders(apiFolders);
+      localStorage.setItem('demo_folders', JSON.stringify(flat));
+    } catch (e) {
+      console.warn('API folders indisponible, fallback localStorage');
+      const savedFolders = localStorage.getItem('demo_folders');
+      if (savedFolders) {
+        try { setFolders(JSON.parse(savedFolders)); } catch {}
+      }
+    } finally {
+      foldersLoadingRef.current = false;
     }
-    
-    // FALLBACK : Dossiers principaux par défaut (3 dossiers pour chaque utilisateur)
-    console.log('Chargement des 3 dossiers principaux...');
-    const demoFolders: Folder[] = [
-          {
-            id: 1,
-            name: 'Dossier de Denis',
-            description: 'Documents et projets de Denis',
-            color: '#3B82F6',
-            icon: '👤',
-            position: 0,
-            full_path: 'Dossier de Denis',
-            documents_count: 0,
-            total_documents_count: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            parent_id: undefined
-          },
-          {
-            id: 2,
-            name: 'Dossier de Sandrine',
-            description: 'Documents et projets de Sandrine',
-            color: '#10B981',
-            icon: '👤',
-            position: 1,
-            full_path: 'Dossier de Sandrine',
-            documents_count: 0,
-            total_documents_count: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            parent_id: undefined
-          },
-          {
-            id: 3,
-            name: 'Dossier Commun',
-            description: 'Documents partagés et communs',
-            color: '#8B5CF6',
-            icon: '📂',
-            position: 2,
-            full_path: 'Dossier Commun',
-            documents_count: 0,
-            total_documents_count: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            parent_id: undefined
-          }
-        ];
-    setFolders(demoFolders);
   };
 
   const loadDocuments = async (forceReload: boolean = false) => {
@@ -399,14 +385,18 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
       });
       
       console.log('✅ API patch réussie');
-      
+
+      // Invalider le cache localStorage (l'API fait autorité)
+      localStorage.removeItem('demo_documents');
+      localStorage.removeItem('demo_data_timestamp');
+
       // Mise à jour locale (pas de rechargement, ça écraserait les modifs)
-      setDocuments(prev => prev.map(doc => 
-        doc.id === documentId 
+      setDocuments(prev => prev.map(doc =>
+        doc.id === documentId
           ? { ...doc, folder_id: folderId }
           : doc
       ));
-      
+
       setShowMoveModal(null);
       alert(`✅ Document déplacé avec succès !`);
       
@@ -507,10 +497,19 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
   });
 
   const DocumentCard = ({ document }: { document: Document }) => (
-    <Card className={`transition-all hover:shadow-md ${
-      selectedDocument === document.id ? 'ring-2 ring-primary' : ''
-    } relative`}>
-      <div 
+    <Card
+      className={`transition-all hover:shadow-md ${
+        selectedDocument === document.id ? 'ring-2 ring-primary' : ''
+      } relative ${draggingDocId === document.id ? 'opacity-50' : ''}`}
+      draggable
+      onDragStart={(e) => {
+        setDraggingDocId(document.id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      onDragEnd={() => setDraggingDocId(null)}
+      style={{ cursor: 'grab' }}
+    >
+      <div
         className="cursor-pointer"
         onClick={() => loadDocument(document.id)}
       >
@@ -615,24 +614,45 @@ const ModernDocumentLibrary: React.FC<DocumentLibraryProps> = ({
 
   const FolderCard = ({ folder }: { folder: Folder }) => {
     const documentCount = getDocumentCountForFolder(folder.id);
-    
+    const isDropTarget = dragOverFolderId === folder.id;
+
     return (
-      <Card 
-        className="cursor-pointer transition-all hover:shadow-md"
+      <Card
+        className={`cursor-pointer transition-all hover:shadow-md ${
+          isDropTarget ? 'ring-2 ring-blue-400 bg-blue-50' : ''
+        }`}
         onClick={() => setCurrentFolder(folder.id)}
+        onDragOver={(e) => {
+          if (draggingDocId !== null) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            setDragOverFolderId(folder.id);
+          }
+        }}
+        onDragLeave={() => setDragOverFolderId(null)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOverFolderId(null);
+          if (draggingDocId !== null) {
+            moveDocumentToFolder(draggingDocId, folder.id);
+            setDraggingDocId(null);
+          }
+        }}
       >
         <CardContent className="p-6">
           <div className="flex items-center space-x-4">
-            <div 
+            <div
               className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl"
               style={{ backgroundColor: folder.color + '20' }}
             >
-              {folder.icon}
+              {isDropTarget ? '📥' : folder.icon}
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-base">{folder.name}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                {documentCount} document{documentCount !== 1 ? 's' : ''}
+                {isDropTarget
+                  ? 'Déposer ici pour déplacer'
+                  : `${documentCount} document${documentCount !== 1 ? 's' : ''}`}
               </p>
             </div>
             <ChevronRight className="w-5 h-5 text-muted-foreground" />

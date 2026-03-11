@@ -11,6 +11,7 @@ import {
   Settings,
   User
 } from 'lucide-react';
+import logo from '/public/logoinvitation.png';
 
 interface SidebarProps {
   activeTab: string;
@@ -31,10 +32,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, className }) 
     <div className={cn("flex flex-col h-full bg-card border-r border-border/40", className)}>
       {/* Logo/Brand */}
       <div className="p-6 border-b border-border/40">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.1)]">
-            <span className="text-primary-foreground font-bold text-base">IV</span>
-          </div>
+        <div className="flex flex-col items-center space-x-3">
+            <img src={logo} alt="Logo" className="w-40 h-20" />
           <div>
             <h1 className="text-lg font-semibold text-foreground">Invitation au Voyage</h1>
             <p className="text-xs text-muted-foreground">Générateur d'offres intelligent</p>

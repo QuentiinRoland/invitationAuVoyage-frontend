@@ -5,6 +5,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Loader2 } from 'lucide-react';
+import logo from '/public/logoinvitation.png';
 
 interface RealLoginFormProps {
   onSuccess?: () => void;
@@ -44,8 +45,8 @@ const RealLoginForm: React.FC<RealLoginFormProps> = ({ onSuccess, onSwitchToRegi
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="space-y-1 text-center">
-        <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mx-auto mb-4">
-          <span className="text-primary-foreground font-bold text-lg">IV</span>
+        <div className="flex justify-center items-center mb-4">
+          <img src={logo} alt="Logo" className="w-40 h-20" />
         </div>
         <CardTitle className="text-2xl font-bold">Bienvenue</CardTitle>
         <CardDescription>

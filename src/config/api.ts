@@ -7,7 +7,7 @@ const isProduction = import.meta.env.PROD;
 // URLs par environnement
 const API_URLS = {
   development: 'http://127.0.0.1:8003/api',  // Port 8003 comme demandé
-  production: import.meta.env.VITE_API_BASE_URL || 'https://your-backend-url.onrender.com/api'
+  production: import.meta.env.VITE_API_BASE_URL || 'https://invitationauvoyage-backend.onrender.com/api'
 };
 
 // Export de l'URL API
