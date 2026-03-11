@@ -67,7 +67,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(response.user);
       console.log('✅ Connexion réussie');
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || error.response?.data?.email?.[0] || error.response?.data?.password?.[0] || 'Erreur de connexion');
+      // L'intercepteur Axios reformate l'erreur en { status, detail, raw }
+      const raw = error?.raw?.response?.data || error?.response?.data;
+      const message =
+        raw?.non_field_errors?.[0] ||
+        raw?.error ||
+        raw?.email?.[0] ||
+        raw?.password?.[0] ||
+        raw?.detail ||
+        error?.detail ||
+        'Erreur de connexion';
+      throw new Error(message);
     } finally {
       setIsLoading(false);
     }
@@ -88,11 +98,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(response.user);
       console.log('✅ Inscription réussie');
     } catch (error: any) {
-      const errorMessage = error.response?.data?.email?.[0] || 
-                          error.response?.data?.username?.[0] ||
-                          error.response?.data?.password?.[0] ||
-                          error.response?.data?.non_field_errors?.[0] ||
-                          'Erreur lors de l\'inscription';
+      const raw = error?.raw?.response?.data || error?.response?.data;
+      const errorMessage =
+        raw?.non_field_errors?.[0] ||
+        raw?.email?.[0] ||
+        raw?.username?.[0] ||
+        raw?.password?.[0] ||
+        raw?.error ||
+        raw?.detail ||
+        error?.detail ||
+        'Erreur lors de l\'inscription';
       throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
