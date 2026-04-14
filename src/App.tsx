@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Clock } from "lucide-react";
 import "./App.css";
 import AskOnceForm from "./components/PdfReaderForm";
 import TextToOfferForm from "./components/TextToOfferForm";
@@ -20,6 +21,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [editorData, setEditorData] = useState<any>(null);
   const [documentId, setDocumentId] = useState<number | undefined>(undefined);
+  const [showOfferHistory, setShowOfferHistory] = useState(false);
 
   const handleSaveOffer = (data: any) => {
     console.log('Offre sauvegardée:', data);
@@ -76,15 +78,23 @@ function App() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Top Bar */}
           <header className="bg-card border-b border-border px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-4">
               <h2 className="text-lg font-semibold capitalize text-foreground">
-                {activeTab === 'dashboard' ? 'Dashboard' : 
+                {activeTab === 'dashboard' ? 'Dashboard' :
                  activeTab === 'text-to-offer' ? 'Créer une offre' :
                  activeTab === 'pdf-import' ? 'Importer PDF' :
                  activeTab === 'document-library' ? 'Mes documents' :
                  activeTab === 'offer-editor' ? 'Éditeur visuel' : activeTab}
-
               </h2>
+              {activeTab === 'text-to-offer' && (
+                <button
+                  onClick={() => setShowOfferHistory(true)}
+                  className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-purple-600 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition-colors border border-gray-200 hover:border-purple-200"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Historique
+                </button>
+              )}
             </div>
             <UserMenu />
           </header>
@@ -101,7 +111,11 @@ function App() {
             )}
             {activeTab === 'text-to-offer' && (
               <ProtectedRoute>
-                <TextToOfferForm onNavigateToEditor={handleNavigateToEditor} />
+                <TextToOfferForm
+                  onNavigateToEditor={handleNavigateToEditor}
+                  showHistory={showOfferHistory}
+                  onCloseHistory={() => setShowOfferHistory(false)}
+                />
               </ProtectedRoute>
             )}
             {activeTab === 'offer-editor' && (

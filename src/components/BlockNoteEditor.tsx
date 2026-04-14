@@ -116,17 +116,34 @@ const convertOfferToBlocks = (offer: any): any[] => {
           }
         } else if (/^\d+[\.\)]\s/.test(t)) {
           blocks.push({ type: 'numberedListItem', content: parseInline(t.replace(/^\d+[\.\)]\s*/, '')) });
-        } else if (/^[•\-\*]\s/.test(t)) {
+        } else if (/^[•]\s/.test(t) || /^[-\*]\s(?=\S{3})/.test(t)) {
+          // Bullet : • toujours, - ou * seulement si suivi d'au moins 3 chars (évite les séparateurs)
           blocks.push({ type: 'bulletListItem', content: parseInline(t.replace(/^[•\-\*]\s*/, '')) });
         } else {
-          // Ligne entièrement bold → H3 uniquement si c'est un titre de jour/étape
-          // (pas pour "**Prix inclus :**" ou "**Important :**" qui sont du contenu)
           const boldMatch = t.match(/^\*\*(.+?)\*\*\s*$/);
           if (boldMatch && isDayHeading(boldMatch[1])) {
+            // Bold + jour/étape → H3
             blocks.push({
               type: 'heading',
               props: { level: 3, textAlignment: 'left' },
               content: [makeText(boldMatch[1])],
+            });
+          } else if (isDayHeading(t)) {
+            // Texte plat "Jour X / Day X / Étape X" non-bold → H3
+            blocks.push({
+              type: 'heading',
+              props: { level: 3, textAlignment: 'left' },
+              content: [makeText(t)],
+            });
+          } else if (
+            t.length < 100 &&
+            /^(hôtel|hotel|hébergement|chambre|date(\s+de\s+(départ|retour|voyage))?|départ|arrivée|retour|vol\s+[A-Z0-9]|transfert|excursion|repas)\s*:/i.test(t)
+          ) {
+            // Sous-titre inline "Hôtel : ...", "Date : ...", "Vol AF006 :" → H3 coloré
+            blocks.push({
+              type: 'heading',
+              props: { level: 3, textAlignment: 'left' },
+              content: [{ type: 'text', text: t, styles: { backgroundColor: sectionColor } }],
             });
           } else {
             blocks.push({ type: 'paragraph', content: parseInline(t) });
@@ -147,60 +164,117 @@ const convertOfferToBlocks = (offer: any): any[] => {
         content: [{ type: 'text', text: section.title || section.type || 'Section', styles: { backgroundColor: color } }],
       });
 
-      // Contenu de la section avec détection des sous-titres
-      const raw = section.body || section.content || section.description || section.details || '';
-      if (raw) {
-        parseBody(raw, color);
-      }
+      // Sections de vol avec données structurées : génération directe depuis flight_data
+      // (évite que "Départ :" soit détecté comme H3 par parseBody)
+      if (section.flight_data) {
+        const fd = section.flight_data;
 
-      // Items (format liste explicite)
-      if (section.items && Array.isArray(section.items)) {
-        section.items.forEach((item: any) => {
-          const text = typeof item === 'string' ? item
-            : item.title && item.description ? `${item.title} — ${item.description}`
-            : item.title || item.label || JSON.stringify(item);
-          blocks.push({ type: 'bulletListItem', content: parseInline(text) });
-        });
+        // Logo compagnie juste sous le titre de section
+        if (fd.airline_logo_url) {
+          blocks.push({
+            type: 'image',
+            props: { url: fd.airline_logo_url, caption: fd.airline || fd.carrier_code || '', width: 80, textAlignment: 'left' },
+          });
+        }
+
+        const legLabel = fd.leg === 'retour' ? '✈️ Vol retour' : '✈️ Vol aller';
+        const cabinLabels: Record<string, string> = {
+          eco: 'Économique', premium_eco: 'Premium Économique', business: 'Business'
+        };
+        const cabinLabel = cabinLabels[fd.cabin_class] || fd.cabin_class || '';
+        const headerParts: string[] = [legLabel];
+        if (fd.flight_number) headerParts.push(fd.flight_number);
+        if (cabinLabel) headerParts.push(cabinLabel);
+
+        // Ligne en-tête bold : "✈️ Vol aller | AF0002 | Économique"
+        blocks.push({ type: 'paragraph', content: parseInline(`**${headerParts.join(' | ')}**`) });
+
+        // Route aéroports : "CDG → JFK" en gras
+        const depAirport = fd.departure_airport || '';
+        const arrAirport = fd.arrival_airport || '';
+        const depCity = fd.departure_city || '';
+        const arrCity = fd.arrival_city || '';
+        if (depAirport || arrAirport) {
+          blocks.push({ type: 'paragraph', content: parseInline(`**${depAirport} → ${arrAirport}**`) });
+        }
+        if (depCity || arrCity) {
+          blocks.push({ type: 'paragraph', content: [makeText(`${depCity} → ${arrCity}`)] });
+        }
+
+        // Horaires avec fuseau horaire (nom de ville) et indicateur +1j si arrivée décalée
+        const depTime = fd.departure_time || '';
+        const arrTime = fd.arrival_time || '';
+        const depTerm = fd.departure_terminal ? ` — Terminal ${fd.departure_terminal}` : '';
+        const arrTerm = fd.arrival_terminal ? ` — Terminal ${fd.arrival_terminal}` : '';
+        const dayOffset: number = fd.arrival_day_offset || 0;
+        const nextDayLabel = dayOffset > 0 ? ` +${dayOffset}j` : '';
+        // Fuseau horaire affiché via la ville (déjà en heure locale Amadeus)
+        const depTz = depCity ? ` (heure de ${depCity})` : '';
+        const arrTz = arrCity ? ` (heure de ${arrCity})` : '';
+        if (depTime) {
+          blocks.push({ type: 'paragraph', content: [makeText(`Départ : ${depTime}${depTerm}${depTz}`)] });
+        }
+        if (arrTime) {
+          blocks.push({ type: 'paragraph', content: [makeText(`Arrivée : ${arrTime}${nextDayLabel}${arrTerm}${arrTz}`)] });
+        }
+
+        if (fd.total_duration) {
+          blocks.push({ type: 'paragraph', content: [makeText(`Durée totale : ${fd.total_duration}`)] });
+        }
+
+        // Escales
+        if (Array.isArray(fd.stopovers) && fd.stopovers.length > 0) {
+          fd.stopovers.forEach((stop: any) => {
+            const stopCity = stop.city ? ` (${stop.city})` : '';
+            const layover = stop.layover_duration ? ` — ${stop.layover_duration}` : '';
+            blocks.push({ type: 'paragraph', content: [makeText(`Escale : ${stop.airport}${stopCity}${layover}`)] });
+          });
+        }
+      } else {
+        // Sections non-vol : parser le body text normalement
+        const raw = section.body || section.content || section.description || section.details || '';
+        if (raw) {
+          parseBody(raw, color);
+        }
+
+        // Items (format liste explicite)
+        if (section.items && Array.isArray(section.items)) {
+          section.items.forEach((item: any) => {
+            const text = typeof item === 'string' ? item
+              : item.title && item.description ? `${item.title} — ${item.description}`
+              : item.title || item.label || JSON.stringify(item);
+            blocks.push({ type: 'bulletListItem', content: parseInline(text) });
+          });
+        }
       }
 
       // Séparateur de fin de section
       blocks.push({ type: 'paragraph', content: [] });
 
-      // Images en fin de section (après le contenu texte)
-      const sectionImagesSet = new Set<string>();
-      if (section.image) {
-        const url = typeof section.image === 'string' ? section.image : section.image?.url;
-        if (url) sectionImagesSet.add(url);
-      }
-      if (section.images && Array.isArray(section.images)) {
-        section.images.forEach((img: any) => {
-          const url = typeof img === 'string' ? img : img?.url;
+      // Images en fin de section — uniquement pour les sections non-vol (Hébergement, etc.)
+      if (!section.flight_data) {
+        const sectionImagesSet = new Set<string>();
+        if (section.image) {
+          const url = typeof section.image === 'string' ? section.image : section.image?.url;
           if (url) sectionImagesSet.add(url);
-        });
-      }
-      if (sectionImagesSet.size > 0) {
-        sectionImagesSet.forEach((url) => {
-          blocks.push({
-            type: 'image',
-            props: { url, caption: '', width: 512, textAlignment: 'left' },
+        }
+        if (section.images && Array.isArray(section.images)) {
+          section.images.forEach((img: any) => {
+            const url = typeof img === 'string' ? img : img?.url;
+            if (url) sectionImagesSet.add(url);
           });
-        });
-        blocks.push({ type: 'paragraph', content: [] });
+        }
+        if (sectionImagesSet.size > 0) {
+          sectionImagesSet.forEach((url) => {
+            blocks.push({
+              type: 'image',
+              props: { url, caption: '', width: 512, textAlignment: 'left' },
+            });
+          });
+          blocks.push({ type: 'paragraph', content: [] });
+        }
       }
     });
-  }
-
-  // Prix
-  if (offer.price || offer.budget) {
-    const priceVal = (offer.price || offer.budget).toString().replace(/[^0-9]/g, '');
-    blocks.push({
-      type: 'heading',
-      props: { level: 2, textAlignment: 'left', backgroundColor: 'pink' },
-      content: [makeText(`Prix par personne : ${priceVal} €`)],
-    });
-    blocks.push({ type: 'paragraph', content: [makeText('Vols aller-retour inclus')] });
-    blocks.push({ type: 'paragraph', content: [makeText('Hébergement inclus')] });
-    blocks.push({ type: 'paragraph', content: [makeText('Taxes incluses')] });
   }
 
   return blocks.length > 0 ? blocks : [{ type: 'paragraph', content: [] }];
@@ -235,6 +309,67 @@ const getInitialBlocks = (prefilledData: any): any[] | null => {
   if (prefilledData.title || prefilledData.sections) return convertOfferToBlocks(prefilledData);
 
   return null;
+};
+
+// ===== CARTE VOL (éditeur + PDF) =====
+const renderFlightCardHTML = (fd: any): string => {
+  const dep = fd.departure_airport || '';
+  const arr = fd.arrival_airport || '';
+  const depCity = fd.departure_city || '';
+  const arrCity = fd.arrival_city || '';
+  const depTime = fd.departure_time || '';
+  const arrTime = fd.arrival_time || '';
+  const duration = fd.total_duration || '';
+  const fn = fd.flight_number || '';
+  const logoUrl = fd.airline_logo_url || '';
+  const airline = fd.airline || fd.carrier_code || '';
+  const stops = fd.stops || 0;
+  const stopovers: any[] = fd.stopovers || [];
+  const cabin = fd.cabin_class || '';
+  const cabinLabel: Record<string, string> = { eco: 'Éco', premium_eco: 'Premium Éco', business: 'Business' };
+  const depTerminal = fd.departure_terminal ? ` T${fd.departure_terminal}` : '';
+  const arrTerminal = fd.arrival_terminal ? ` T${fd.arrival_terminal}` : '';
+
+  const stopoversHTML = stopovers.map((s: any) => {
+    const via = s.airport || '';
+    const city = s.city ? ` (${s.city})` : '';
+    const layover = s.layover_duration ? ` — ${s.layover_duration} de correspondance` : '';
+    return `<div style="font-size:12px;color:#6B7280;margin-top:4px;">↳ Escale ${via}${city}${layover}</div>`;
+  }).join('');
+
+  const directOrStop = stops === 0
+    ? '<span style="color:#10B981;font-size:12px;">Direct</span>'
+    : `<span style="color:#F59E0B;font-size:12px;">${stops} escale${stops > 1 ? 's' : ''}</span>`;
+
+  return `
+<div style="background:#EFF6FF;border:1.5px solid #3B82F6;border-radius:10px;padding:16px 20px;margin:12px 0;font-family:Georgia,serif;">
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap;">
+    ${logoUrl ? `<img src="${logoUrl}" height="36" style="object-fit:contain;flex-shrink:0;" />` : ''}
+    <div style="flex:1;">
+      <span style="font-weight:bold;font-size:15px;color:#1E3A5F;">${airline}</span>
+      ${fn ? `<span style="margin-left:10px;color:#6B7280;font-size:13px;">✈ ${fn}</span>` : ''}
+      ${cabin && cabinLabel[cabin] ? `<span style="margin-left:10px;background:#DBEAFE;color:#1D4ED8;font-size:11px;padding:2px 8px;border-radius:20px;">${cabinLabel[cabin]}</span>` : ''}
+    </div>
+    ${directOrStop}
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div style="text-align:center;">
+      <div style="font-size:22px;font-weight:bold;color:#1E3A5F;">${depTime}</div>
+      <div style="font-size:13px;font-weight:bold;color:#374151;">${dep}${depTerminal}</div>
+      ${depCity ? `<div style="font-size:11px;color:#6B7280;">${depCity}</div>` : ''}
+    </div>
+    <div style="flex:1;text-align:center;padding:0 8px;">
+      <div style="border-top:2px dashed #93C5FD;margin:0 4px;"></div>
+      ${duration ? `<div style="font-size:11px;color:#6B7280;margin-top:4px;">${duration}</div>` : ''}
+      ${stopoversHTML}
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:22px;font-weight:bold;color:#1E3A5F;">${arrTime}</div>
+      <div style="font-size:13px;font-weight:bold;color:#374151;">${arr}${arrTerminal}</div>
+      ${arrCity ? `<div style="font-size:11px;color:#6B7280;">${arrCity}</div>` : ''}
+    </div>
+  </div>
+</div>`;
 };
 
 // ===== CONVERSION BLOCS → HTML POUR PDF =====
@@ -391,6 +526,17 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [savedDocId, setSavedDocId] = useState<number | undefined>(documentId);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [imageQuery, setImageQuery] = useState('');
+  const [imageResults, setImageResults] = useState<{url:string;thumb:string;alt:string;author:string;source:string}[]>([]);
+  const [imageSearchLoading, setImageSearchLoading] = useState(false);
+  const [imageLoadMoreLoading, setImageLoadMoreLoading] = useState(false);
+  const [imageSearchError, setImageSearchError] = useState('');
+  const [imageProvider, setImageProvider] = useState('');
+  const [imagePage, setImagePage] = useState(1);
+  const IMAGE_PAGE_SIZE = 32;
+  const [selectedImageBlockId, setSelectedImageBlockId] = useState<string | null>(null);
+  const [replacingImageBlockId, setReplacingImageBlockId] = useState<string | null>(null);
   const [headerFooter] = useState({
     enabled: true,
     headerLogo: 'https://i.imgur.com/ENSFl11.png',
@@ -419,6 +565,30 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
     }
   }, [prefilledData]);
 
+  // Détecter quand un bloc image est sélectionné (pour afficher "Remplacer l'image")
+  useEffect(() => {
+    const tiptap = (editor as any)._tiptapEditor;
+    if (!tiptap) return;
+    const handler = () => {
+      try {
+        const selected = (editor as any).getSelectedBlocks?.();
+        if (selected) {
+          const imgBlock = selected.find((b: any) => b.type === 'image');
+          setSelectedImageBlockId(imgBlock?.id ?? null);
+          return;
+        }
+      } catch {}
+      try {
+        const pos = (editor as any).getTextCursorPosition?.();
+        setSelectedImageBlockId(pos?.block?.type === 'image' ? pos.block.id : null);
+      } catch {
+        setSelectedImageBlockId(null);
+      }
+    };
+    tiptap.on('selectionUpdate', handler);
+    return () => tiptap.off('selectionUpdate', handler);
+  }, [editor]);
+
   // Trouver le dossier de l'utilisateur parmi une liste de dossiers
   const findFolderIdForUser = (folders: any[]): number | undefined => {
     if (!user || !folders?.length) return undefined;
@@ -443,6 +613,75 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
     const firstH1 = editor.document.find((b: any) => b.type === 'heading' && b.props?.level === 1);
     const titleText = (firstH1?.content as any[])?.map((c: any) => c.text).join('') || '';
     return titleText || 'Document';
+  };
+
+  // ===== RECHERCHE D'IMAGES =====
+  const handleImageSearch = async (q: string) => {
+    if (!q.trim()) return;
+    setImageSearchLoading(true);
+    setImageSearchError('');
+    setImagePage(1);
+    try {
+      const res = await api.get(`api/search-images/?q=${encodeURIComponent(q)}&count=${IMAGE_PAGE_SIZE}`);
+      setImageResults(res.data.images || []);
+      setImageProvider(res.data.provider || '');
+      if (res.data.error) setImageSearchError(res.data.error);
+    } catch {
+      setImageResults([]);
+      setImageSearchError('Erreur lors de la recherche.');
+    } finally {
+      setImageSearchLoading(false);
+    }
+  };
+
+  const handleImageLoadMore = async () => {
+    if (!imageQuery.trim()) return;
+    setImageLoadMoreLoading(true);
+    try {
+      const nextPage = imagePage + 1;
+      // Pixabay supporte la pagination via &page=, on demande la prochaine tranche
+      const res = await api.get(
+        `api/search-images/?q=${encodeURIComponent(imageQuery)}&count=${IMAGE_PAGE_SIZE}&page=${nextPage}`
+      );
+      const newImgs = res.data.images || [];
+      setImageResults(prev => [...prev, ...newImgs]);
+      setImagePage(nextPage);
+    } catch {
+      // silencieux
+    } finally {
+      setImageLoadMoreLoading(false);
+    }
+  };
+
+  const handleInsertImage = (url: string) => {
+    // Si on remplace un bloc image précis (depuis "Remplacer l'image")
+    if (replacingImageBlockId) {
+      try {
+        const block = (editor as any).getBlock?.(replacingImageBlockId);
+        if (block) {
+          editor.updateBlock(replacingImageBlockId as any, { props: { ...block.props, url } } as any);
+          setReplacingImageBlockId(null);
+          setShowImagePicker(false);
+          return;
+        }
+      } catch {}
+      setReplacingImageBlockId(null);
+    }
+    // Sinon : vérifier la sélection courante
+    const selected = (editor as any).getSelectedBlocks?.();
+    const imageBlock = selected?.find((b: any) => b.type === 'image');
+    if (imageBlock) {
+      editor.updateBlock(imageBlock, { type: 'image', props: { url } } as any);
+    } else {
+      // Insérer après le dernier bloc du document
+      const lastBlock = editor.document[editor.document.length - 1];
+      editor.insertBlocks(
+        [{ type: 'image', props: { url, caption: '', previewWidth: 700 } } as any],
+        lastBlock,
+        'after'
+      );
+    }
+    setShowImagePicker(false);
   };
 
   // ===== SAUVEGARDE =====
@@ -510,8 +749,34 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
     setIsLoading(true);
     try {
       const blocks = editor.document;
-      const bodyHTML = convertBlocksToHTML(blocks);
+      let bodyHTML = convertBlocksToHTML(blocks);
+
+      // Injecter les cartes vol visuelles juste après les titres de section correspondants
+      const offerSections: any[] = prefilledData?.offer_structure?.sections || [];
+      offerSections.forEach((section: any) => {
+        if (!section.flight_data || !section.title) return;
+        const cardHTML = renderFlightCardHTML(section.flight_data);
+        // Cherche le titre de section dans le HTML généré et injecte la carte après
+        const escapedTitle = section.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        bodyHTML = bodyHTML.replace(
+          new RegExp(`(<h2[^>]*>[^<]*${escapedTitle}[^<]*</h2>)`, 'i'),
+          `$1${cardHTML}`
+        );
+      });
+
       const title = getDocTitle();
+
+      // Date du jour au format JJ/MM/AAAA
+      const now = new Date();
+      const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+
+      // Injecter la date en haut + disclaimer en bas
+      bodyHTML = `<p style="text-align:right;font-size:12px;color:#888;font-family:Georgia,serif;margin:0 0 16px 0;">Date : ${dateStr}</p>${bodyHTML}
+<div style="margin-top:40px;padding-top:10px;border-top:1px solid #e5e7eb;">
+  <p style="font-size:11px;color:#999;font-style:italic;font-family:Georgia,serif;line-height:1.5;margin:0;">
+    <strong style="color:#666;">Tarifs et conditions</strong> — Offre sous réserve de disponibilités au moment de la réservation.
+  </p>
+</div>`;
 
       const headerHTML = headerFooter.enabled ? `
         <div class="page-header">
@@ -542,6 +807,7 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
                 <span style="display:block;${txt}">Av. Baron d'Huart 7,</span>
                 <span style="display:block;${txt}">1150 Woluwe St-Pierre</span>
               </span>
+              <span class="page-num" style="display:block;font-size:11px;color:#aaa;font-family:Georgia,serif;margin-top:3px;text-align:right;"></span>
             </td>
           </tr>
         </table>` : '';
@@ -563,6 +829,7 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
         h2 { font-size: 18px; }
         ul { list-style: disc; }
         p { line-height: 1.7; }
+        .page-num::after { content: "Page " counter(page) " / " counter(pages); }
       `;
 
       const response = await api.post('api/grapesjs-pdf-generator/', { html, css,
@@ -609,6 +876,28 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
         >
           {isLoading ? '...' : '💾 Sauvegarder'}
         </button>
+        {selectedImageBlockId && (
+          <button
+            onClick={() => { setReplacingImageBlockId(selectedImageBlockId); setShowImagePicker(true); }}
+            style={{
+              padding: '8px 18px', background: '#059669', color: 'white',
+              border: 'none', borderRadius: '8px', cursor: 'pointer',
+              fontWeight: '600', fontSize: '14px',
+            }}
+          >
+            🔍 Remplacer l'image
+          </button>
+        )}
+        <button
+          onClick={() => { setReplacingImageBlockId(null); setShowImagePicker(true); }}
+          style={{
+            padding: '8px 18px', background: '#7c3aed', color: 'white',
+            border: 'none', borderRadius: '8px', cursor: 'pointer',
+            fontWeight: '600', fontSize: '14px',
+          }}
+        >
+          🖼️ Images
+        </button>
         <button
           onClick={handleGeneratePDF}
           disabled={isLoading}
@@ -652,6 +941,142 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
 
         </div>
       </div>
+
+      {/* ===== IMAGE PICKER MODAL ===== */}
+      {showImagePicker && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => { setShowImagePicker(false); setReplacingImageBlockId(null); }}
+        >
+          <div
+            style={{
+              background: 'white', borderRadius: '16px',
+              width: '760px', maxWidth: '95vw',
+              maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+              overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '18px', fontWeight: 700, color: '#1a1a1a' }}>
+                {replacingImageBlockId ? '🔍 Remplacer l\'image' : '🖼️ Insérer une image'}
+              </span>
+              <div style={{ flex: 1, display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={imageQuery}
+                  onChange={e => setImageQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleImageSearch(imageQuery)}
+                  placeholder="Bali, hôtel piscine, plage tropicale…"
+                  autoFocus
+                  style={{
+                    flex: 1, padding: '8px 14px', borderRadius: '8px',
+                    border: '1.5px solid #e5e7eb', fontSize: '14px', outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={() => handleImageSearch(imageQuery)}
+                  disabled={imageSearchLoading}
+                  style={{
+                    padding: '8px 18px', background: '#7c3aed', color: 'white',
+                    border: 'none', borderRadius: '8px', cursor: 'pointer',
+                    fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap',
+                    opacity: imageSearchLoading ? 0.6 : 1,
+                  }}
+                >
+                  {imageSearchLoading ? '…' : 'Rechercher'}
+                </button>
+              </div>
+              <button
+                onClick={() => { setShowImagePicker(false); setReplacingImageBlockId(null); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: '#9ca3af', lineHeight: 1 }}
+              >×</button>
+            </div>
+
+            {/* Grid */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 20px' }}>
+              {imageResults.length === 0 && !imageSearchLoading && !imageSearchError && (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>
+                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔍</div>
+                  <p style={{ fontSize: '14px' }}>Tapez un mot-clé et lancez la recherche</p>
+                  <p style={{ fontSize: '12px', marginTop: '4px', color: '#d1d5db' }}>Cliquez sur une image pour l'insérer dans l'éditeur</p>
+                </div>
+              )}
+              {imageSearchError && !imageSearchLoading && (
+                <div style={{ textAlign: 'center', padding: '32px 24px', color: '#ef4444' }}>
+                  <div style={{ fontSize: '32px', marginBottom: '10px' }}>⚠️</div>
+                  <p style={{ fontSize: '13px' }}>{imageSearchError}</p>
+                </div>
+              )}
+              {imageSearchLoading && (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af', fontSize: '14px' }}>
+                  Recherche en cours…
+                </div>
+              )}
+              {!imageSearchLoading && imageResults.length > 0 && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                    {imageResults.map((img, i) => (
+                      <div
+                        key={`${i}-${img.url}`}
+                        onClick={() => handleInsertImage(img.url)}
+                        style={{
+                          cursor: 'pointer', borderRadius: '8px', overflow: 'hidden',
+                          border: '2px solid transparent', transition: 'border-color 0.15s, transform 0.1s',
+                          position: 'relative',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#7c3aed'; (e.currentTarget as HTMLDivElement).style.transform = 'scale(1.03)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'transparent'; (e.currentTarget as HTMLDivElement).style.transform = 'scale(1)'; }}
+                        title={img.alt || img.author}
+                      >
+                        <img
+                          src={img.thumb || img.url}
+                          alt={img.alt}
+                          style={{ width: '100%', height: '110px', objectFit: 'cover', display: 'block' }}
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                        {img.author && (
+                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.45)', color: 'white', fontSize: '10px', padding: '3px 5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {img.author}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Charger plus */}
+                  <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                    <button
+                      onClick={handleImageLoadMore}
+                      disabled={imageLoadMoreLoading}
+                      style={{
+                        padding: '8px 28px', background: imageLoadMoreLoading ? '#e5e7eb' : '#f3f4f6',
+                        border: '1.5px solid #e5e7eb', borderRadius: '8px',
+                        cursor: imageLoadMoreLoading ? 'default' : 'pointer',
+                        fontSize: '13px', color: '#374151', fontWeight: 500,
+                      }}
+                    >
+                      {imageLoadMoreLoading ? 'Chargement…' : `Charger plus (${imageResults.length} affichées)`}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer hint */}
+            <div style={{ padding: '10px 24px', borderTop: '1px solid #f0f0f0', fontSize: '11px', color: '#9ca3af' }}>
+              {replacingImageBlockId
+                ? 'Cliquez sur une image pour remplacer l\'image sélectionnée'
+                : 'Cliquez sur une image pour l\'insérer dans l\'éditeur'}
+              {imageProvider && <> · Source : <strong>{imageProvider}</strong></>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

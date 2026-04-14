@@ -49,11 +49,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (authenticated) {
         setUser(userData);
       } else {
+        // Seulement supprimer le token si le serveur confirme qu'il est invalide (401)
         tokenUtils.removeToken();
       }
-    } catch (error) {
-      console.error('Erreur lors de la vérification de l\'authentification:', error);
-      tokenUtils.removeToken();
+    } catch (error: any) {
+      const status = error?.status || error?.raw?.response?.status;
+      if (status === 401) {
+        // Token explicitement rejeté par le serveur → déconnexion
+        tokenUtils.removeToken();
+      } else {
+        // Erreur réseau ou serveur temporaire → garder le token, on réessaiera
+        console.warn('Vérification auth échouée (erreur temporaire), session conservée:', error);
+        const token = tokenUtils.getToken();
+        if (token) {
+          // Restaurer l'utilisateur depuis le localStorage si possible
+          const savedUser = localStorage.getItem('auth_user');
+          if (savedUser) {
+            try { setUser(JSON.parse(savedUser)); } catch {}
+          }
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -65,6 +80,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await authApi.login({ email, password });
       tokenUtils.setToken(response.token);
       setUser(response.user);
+      localStorage.setItem('auth_user', JSON.stringify(response.user));
       console.log('✅ Connexion réussie');
     } catch (error: any) {
       // L'intercepteur Axios reformate l'erreur en { status, detail, raw }
@@ -121,6 +137,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Erreur lors de la déconnexion:', error);
     } finally {
       tokenUtils.removeToken();
+      localStorage.removeItem('auth_user');
       setUser(null);
       console.log('✅ Déconnexion réussie');
     }
