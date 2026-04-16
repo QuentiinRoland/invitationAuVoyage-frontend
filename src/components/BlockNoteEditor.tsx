@@ -342,7 +342,7 @@ const renderFlightCardHTML = (fd: any): string => {
     : `<span style="color:#F59E0B;font-size:12px;">${stops} escale${stops > 1 ? 's' : ''}</span>`;
 
   return `
-<div style="background:#EFF6FF;border:1.5px solid #3B82F6;border-radius:10px;padding:16px 20px;margin:12px 0;font-family:Georgia,serif;">
+<div style="background:#EFF6FF;border:1.5px solid #3B82F6;border-radius:10px;padding:16px 20px;margin:12px 0;font-family:Corbel,Arial,sans-serif;">
   <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap;">
     ${logoUrl ? `<img src="${logoUrl}" height="36" style="object-fit:contain;flex-shrink:0;" />` : ''}
     <div style="flex:1;">
@@ -490,20 +490,20 @@ const FooterComponent: React.FC<{ userEmail?: string }> = ({ userEmail }) => {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <IconBox><svg width="15" height="15" fill="white" viewBox="0 0 24 24"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg></IconBox>
-        <span style={{ fontSize: '13px', color: '#4a4a4a', fontFamily: 'Georgia, serif' }}>+32 2 774 04 04</span>
+        <span style={{ fontSize: '13px', color: '#4a4a4a', fontFamily: 'Corbel, Arial, sans-serif' }}>+32 2 774 04 04</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <IconBox><svg width="15" height="15" fill="white" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg></IconBox>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <span style={{ fontSize: '13px', color: '#4a4a4a', fontFamily: 'Georgia, serif' }}>{displayEmail}</span>
-          <span style={{ fontSize: '12px', color: '#777', fontFamily: 'Georgia, serif' }}>https://www.invit.be/</span>
+          <span style={{ fontSize: '13px', color: '#4a4a4a', fontFamily: 'Corbel, Arial, sans-serif' }}>{displayEmail}</span>
+          <span style={{ fontSize: '12px', color: '#777', fontFamily: 'Corbel, Arial, sans-serif' }}>https://www.invit.be/</span>
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <IconBox><svg width="15" height="15" fill="white" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg></IconBox>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <span style={{ fontSize: '13px', color: '#4a4a4a', fontFamily: 'Georgia, serif' }}>Av. Baron d'Huart 7,</span>
-          <span style={{ fontSize: '13px', color: '#4a4a4a', fontFamily: 'Georgia, serif' }}>1150 Woluwe St-Pierre</span>
+          <span style={{ fontSize: '13px', color: '#4a4a4a', fontFamily: 'Corbel, Arial, sans-serif' }}>Av. Baron d'Huart 7,</span>
+          <span style={{ fontSize: '13px', color: '#4a4a4a', fontFamily: 'Corbel, Arial, sans-serif' }}>1150 Woluwe St-Pierre</span>
         </div>
       </div>
     </div>
@@ -770,13 +770,35 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
       const now = new Date();
       const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
 
-      // Injecter la date en haut + disclaimer en bas
-      bodyHTML = `<p style="text-align:right;font-size:12px;color:#888;font-family:Georgia,serif;margin:0 0 16px 0;">Date : ${dateStr}</p>${bodyHTML}
+      // Mosaïque finale 2×4 avec toutes les images du document
+      const allImageUrls: string[] = [];
+      blocks.forEach((b: any) => {
+        if (b.type === 'image' && b.props?.url) allImageUrls.push(b.props.url);
+      });
+      // Dédoublonner et limiter à 8
+      const mosaicUrls = [...new Set(allImageUrls)].slice(0, 8);
+      let mosaicHTML = '';
+      if (mosaicUrls.length > 0) {
+        const cells = mosaicUrls.map(url =>
+          `<td style="padding:3px;"><img src="${url}" alt="" style="width:100%;height:100px;object-fit:cover;border-radius:4px;display:block;" /></td>`
+        );
+        // 2 colonnes × N lignes
+        const rows: string[] = [];
+        for (let i = 0; i < cells.length; i += 4) {
+          rows.push(`<tr>${cells.slice(i, i + 4).join('')}</tr>`);
+        }
+        mosaicHTML = `<div style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px;">
+          <table style="width:100%;border-collapse:collapse;">${rows.join('')}</table>
+        </div>`;
+      }
+
+      // Injecter la date en haut + disclaimer et mosaïque en bas
+      bodyHTML = `<p style="text-align:right;font-size:12px;color:#888;font-family:Corbel,Arial,sans-serif;margin:0 0 16px 0;">Date : ${dateStr}</p>${bodyHTML}
 <div style="margin-top:40px;padding-top:10px;border-top:1px solid #e5e7eb;">
-  <p style="font-size:11px;color:#999;font-style:italic;font-family:Georgia,serif;line-height:1.5;margin:0;">
+  <p style="font-size:11px;color:#999;font-style:italic;font-family:Corbel,Arial,sans-serif;line-height:1.5;margin:0;">
     <strong style="color:#666;">Tarifs et conditions</strong> — Offre sous réserve de disponibilités au moment de la réservation.
   </p>
-</div>`;
+</div>${mosaicHTML}`;
 
       const headerHTML = headerFooter.enabled ? `
         <div class="page-header">
@@ -788,7 +810,7 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
       const phone = iconDiv(`<svg width="13" height="13" fill="white" viewBox="0 0 24 24" style="vertical-align:middle;"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>`);
       const mail  = iconDiv(`<svg width="13" height="13" fill="white" viewBox="0 0 24 24" style="vertical-align:middle;"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>`);
       const pin   = iconDiv(`<svg width="13" height="13" fill="white" viewBox="0 0 24 24" style="vertical-align:middle;"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`);
-      const txt   = 'font-size:13px;color:#4a4a4a;font-family:Georgia,serif;vertical-align:middle;';
+      const txt   = 'font-size:13px;color:#4a4a4a;font-family:Corbel,Arial,sans-serif;vertical-align:middle;';
 
       const footerHTML2 = headerFooter.enabled ? `
         <table class="page-footer" style="width:210mm;border-collapse:collapse;border-top:1px solid #e5e7eb;">
@@ -799,7 +821,7 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
             <td style="padding:14px 0;vertical-align:middle;text-align:center;white-space:nowrap;">
               ${mail}<span style="vertical-align:middle;display:inline-block;">
                 <span style="display:block;${txt}">${userEmail}</span>
-                <span style="display:block;font-size:12px;color:#888;font-family:Georgia,serif;">https://www.invit.be/</span>
+                <span style="display:block;font-size:12px;color:#888;font-family:Corbel,Arial,sans-serif;">https://www.invit.be/</span>
               </span>
             </td>
             <td style="padding:14px 15mm 14px 0;vertical-align:middle;text-align:right;white-space:nowrap;">
@@ -807,7 +829,6 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
                 <span style="display:block;${txt}">Av. Baron d'Huart 7,</span>
                 <span style="display:block;${txt}">1150 Woluwe St-Pierre</span>
               </span>
-              <span class="page-num" style="display:block;font-size:11px;color:#aaa;font-family:Georgia,serif;margin-top:3px;text-align:right;"></span>
             </td>
           </tr>
         </table>` : '';
@@ -821,7 +842,7 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
           @top-left { content: element(header); width: 210mm; }
           @bottom-left { content: element(footer); width: 210mm; }
         }
-        body { font-family: Georgia, serif; color: #2c3e50; background: white; }
+        body { font-family: Corbel, Arial, sans-serif; color: #2c3e50; background: white; }
         .page-header { position: running(header); width: 210mm; }
         .page-footer { position: running(footer); width: 210mm; }
         .content { padding: 0 1.5cm; }
@@ -829,7 +850,6 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
         h2 { font-size: 18px; }
         ul { list-style: disc; }
         p { line-height: 1.7; }
-        .page-num::after { content: "Page " counter(page) " / " counter(pages); }
       `;
 
       const response = await api.post('api/grapesjs-pdf-generator/', { html, css,
