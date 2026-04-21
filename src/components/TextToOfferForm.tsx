@@ -7,6 +7,7 @@ import {
   AlertCircle,
   Plus,
   X,
+  Image as ImageIcon,
   ExternalLink,
   MapPin,
   Star,
