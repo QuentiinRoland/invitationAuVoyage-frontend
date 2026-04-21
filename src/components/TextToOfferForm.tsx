@@ -15,7 +15,6 @@ import {
   Plane,
   ChevronDown,
   ChevronUp,
-  Search,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -253,12 +252,7 @@ const TextToOfferForm: React.FC<TextToOfferFormProps> = ({ onNavigateToEditor, s
   const [urlPreviews, setUrlPreviews] = useState<Record<number, UrlPreview>>({});
   const [hotelResults, setHotelResults] = useState<Record<number, HotelGoogleResult>>({});
 
-  // Recherche directe par nom (hôtel / destination)
-  const [directQuery, setDirectQuery] = useState('');
-  const [directResults, setDirectResults] = useState<HotelGoogleResult[]>([]);
-  const [directLoading, setDirectLoading] = useState(false);
-
-  const [companyInfo] = useState<CompanyInfo>({
+const [companyInfo] = useState<CompanyInfo>({
     name: 'Invitation au Voyage',
     address: "123 Rue de l'Innovation, 75001 Paris",
     phone: '+33 1 23 45 67 89',
@@ -304,19 +298,6 @@ const TextToOfferForm: React.FC<TextToOfferFormProps> = ({ onNavigateToEditor, s
     }));
   }, []);
 
-  const handleDirectSearch = useCallback(async (q: string) => {
-    if (!q.trim()) return;
-    setDirectLoading(true);
-    try {
-      const response = await api.post('api/hotel-google-search/', { query: q });
-      setDirectResults(prev => [{ ...response.data, loading: false }, ...prev]);
-      setDirectQuery('');
-    } catch (err: any) {
-      setDirectResults(prev => [{ name: '', address: '', photos: [], loading: false, error: err.response?.data?.error || 'Résultat introuvable' }, ...prev]);
-    } finally {
-      setDirectLoading(false);
-    }
-  }, []);
 
   const addUrlField = () => setWebsiteUrls([...websiteUrls, '']);
   const removeUrlField = (index: number) => {
@@ -362,10 +343,9 @@ const TextToOfferForm: React.FC<TextToOfferFormProps> = ({ onNavigateToEditor, s
         website_urls: validUrls,
         company_info: companyInfo,
         manual_flights_only: true,
-        hotel_google_images: [
-          ...directResults.filter(r => !r.error && r.photos.length > 0).flatMap(r => r.photos),
-          ...Object.values(hotelResults).filter(r => !r.loading && !r.error && r.photos.length > 0).flatMap(r => r.photos),
-        ],
+        hotel_google_images: Object.values(hotelResults)
+          .filter(r => !r.loading && !r.error && r.photos.length > 0)
+          .flatMap(r => r.photos),
       };
 
       if (hasOutbound && (outboundFlight.flightNumber || outboundFlight.depCity || outboundFlight.arrCity)) {
@@ -738,81 +718,6 @@ const TextToOfferForm: React.FC<TextToOfferFormProps> = ({ onNavigateToEditor, s
             + Ajouter une URL
           </Button>
 
-          {/* ── Recherche directe par nom ───────────────────────────────── */}
-          <div className="space-y-3 pt-4 border-t border-gray-100">
-            <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-              <Search className="w-4 h-4 text-gray-400" />
-              Recherche par nom
-            </label>
-            <div className="flex gap-2">
-              <Input
-                value={directQuery}
-                onChange={e => setDirectQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleDirectSearch(directQuery)}
-                placeholder="ex : Beachcomber Le Victoria, Île Maurice..."
-                className="flex-1 bg-gray-50 border-gray-200 text-sm focus:bg-white"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => handleDirectSearch(directQuery)}
-                disabled={directLoading || !directQuery.trim()}
-                className="hover:bg-blue-50 hover:text-blue-600 shrink-0"
-              >
-                {directLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              </Button>
-            </div>
-
-            {/* Résultats des recherches directes */}
-            {directResults.map((r, i) => (
-              <div key={i} className={`rounded-xl border p-3 space-y-2 ${r.error ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-blue-50'}`}>
-                {r.error ? (
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{r.error}</p>
-                    <button onClick={() => setDirectResults(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-500"><X className="w-4 h-4" /></button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-0.5 flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900">{r.name}</p>
-                        {r.address && (
-                          <p className="text-xs text-gray-600 flex items-center gap-1">
-                            <MapPin className="w-3 h-3 shrink-0 text-blue-500" />{r.address}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-3 pt-0.5">
-                          {r.rating && (
-                            <span className="text-xs text-amber-600 flex items-center gap-0.5">
-                              <Star className="w-3 h-3 fill-amber-400 stroke-amber-500" />
-                              {r.rating}
-                              {r.user_ratings_total && <span className="text-gray-400 ml-0.5">({r.user_ratings_total.toLocaleString()})</span>}
-                            </span>
-                          )}
-                          {r.google_maps_url && (
-                            <a href={r.google_maps_url} target="_blank" rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline flex items-center gap-0.5">
-                              <ExternalLink className="w-3 h-3" /> Google Maps
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      <button onClick={() => setDirectResults(prev => prev.filter((_, idx) => idx !== i))}
-                        className="text-gray-400 hover:text-red-500 shrink-0"><X className="w-4 h-4" /></button>
-                    </div>
-                    {r.photos.length > 0 && (
-                      <div className="flex gap-2 overflow-x-auto pb-1">
-                        {r.photos.slice(0, 8).map((photo, pIdx) => (
-                          <img key={pIdx} src={photo} alt="" className="h-20 w-28 object-cover rounded shrink-0 border border-blue-200"
-                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
         </section>
 
         {/* ── Section 5 : Formalités ─────────────────────────────────────────── */}
