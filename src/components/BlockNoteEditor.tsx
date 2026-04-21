@@ -526,17 +526,7 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [savedDocId, setSavedDocId] = useState<number | undefined>(documentId);
-  const [showImagePicker, setShowImagePicker] = useState(false);
-  const [imageQuery, setImageQuery] = useState('');
-  const [imageResults, setImageResults] = useState<{url:string;thumb:string;alt:string;author:string;source:string}[]>([]);
-  const [imageSearchLoading, setImageSearchLoading] = useState(false);
-  const [imageLoadMoreLoading, setImageLoadMoreLoading] = useState(false);
-  const [imageSearchError, setImageSearchError] = useState('');
-  const [imageProvider, setImageProvider] = useState('');
-  const [imagePage, setImagePage] = useState(1);
-  const IMAGE_PAGE_SIZE = 32;
   const [selectedImageBlockId, setSelectedImageBlockId] = useState<string | null>(null);
-  const [replacingImageBlockId, setReplacingImageBlockId] = useState<string | null>(null);
   const [headerFooter] = useState({
     enabled: true,
     headerLogo: 'https://i.imgur.com/ENSFl11.png',
@@ -615,73 +605,10 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
     return titleText || 'Document';
   };
 
-  // ===== RECHERCHE D'IMAGES =====
-  const handleImageSearch = async (q: string) => {
-    if (!q.trim()) return;
-    setImageSearchLoading(true);
-    setImageSearchError('');
-    setImagePage(1);
-    try {
-      const res = await api.get(`api/search-images/?q=${encodeURIComponent(q)}&count=${IMAGE_PAGE_SIZE}`);
-      setImageResults(res.data.images || []);
-      setImageProvider(res.data.provider || '');
-      if (res.data.error) setImageSearchError(res.data.error);
-    } catch {
-      setImageResults([]);
-      setImageSearchError('Erreur lors de la recherche.');
-    } finally {
-      setImageSearchLoading(false);
-    }
-  };
-
-  const handleImageLoadMore = async () => {
-    if (!imageQuery.trim()) return;
-    setImageLoadMoreLoading(true);
-    try {
-      const nextPage = imagePage + 1;
-      // Pixabay supporte la pagination via &page=, on demande la prochaine tranche
-      const res = await api.get(
-        `api/search-images/?q=${encodeURIComponent(imageQuery)}&count=${IMAGE_PAGE_SIZE}&page=${nextPage}`
-      );
-      const newImgs = res.data.images || [];
-      setImageResults(prev => [...prev, ...newImgs]);
-      setImagePage(nextPage);
-    } catch {
-      // silencieux
-    } finally {
-      setImageLoadMoreLoading(false);
-    }
-  };
-
-  const handleInsertImage = (url: string) => {
-    // Si on remplace un bloc image précis (depuis "Remplacer l'image")
-    if (replacingImageBlockId) {
-      try {
-        const block = (editor as any).getBlock?.(replacingImageBlockId);
-        if (block) {
-          editor.updateBlock(replacingImageBlockId as any, { props: { ...block.props, url } } as any);
-          setReplacingImageBlockId(null);
-          setShowImagePicker(false);
-          return;
-        }
-      } catch {}
-      setReplacingImageBlockId(null);
-    }
-    // Sinon : vérifier la sélection courante
-    const selected = (editor as any).getSelectedBlocks?.();
-    const imageBlock = selected?.find((b: any) => b.type === 'image');
-    if (imageBlock) {
-      editor.updateBlock(imageBlock, { type: 'image', props: { url } } as any);
-    } else {
-      // Insérer après le dernier bloc du document
-      const lastBlock = editor.document[editor.document.length - 1];
-      editor.insertBlocks(
-        [{ type: 'image', props: { url, caption: '', previewWidth: 700 } } as any],
-        lastBlock,
-        'after'
-      );
-    }
-    setShowImagePicker(false);
+  const openGoogleImages = () => {
+    const title = getDocTitle();
+    const q = title && title !== 'Document' ? encodeURIComponent(title) : '';
+    window.open(`https://images.google.com${q ? `/search?q=${q}` : ''}`, '_blank');
   };
 
   // ===== SAUVEGARDE =====
@@ -898,7 +825,7 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
         </button>
         {selectedImageBlockId && (
           <button
-            onClick={() => { setReplacingImageBlockId(selectedImageBlockId); setShowImagePicker(true); }}
+            onClick={openGoogleImages}
             style={{
               padding: '8px 18px', background: '#059669', color: 'white',
               border: 'none', borderRadius: '8px', cursor: 'pointer',
@@ -909,14 +836,14 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
           </button>
         )}
         <button
-          onClick={() => { setReplacingImageBlockId(null); setShowImagePicker(true); }}
+          onClick={openGoogleImages}
           style={{
             padding: '8px 18px', background: '#7c3aed', color: 'white',
             border: 'none', borderRadius: '8px', cursor: 'pointer',
             fontWeight: '600', fontSize: '14px',
           }}
         >
-          🖼️ Images
+          🖼️ Google Images
         </button>
         <button
           onClick={handleGeneratePDF}
@@ -962,8 +889,8 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
         </div>
       </div>
 
-      {/* ===== IMAGE PICKER MODAL ===== */}
-      {showImagePicker && (
+      {/* IMAGE PICKER MODAL — supprimé, remplacé par Google Images */}
+      {false && (
         <div
           style={{
             position: 'fixed', inset: 0, zIndex: 1000,
