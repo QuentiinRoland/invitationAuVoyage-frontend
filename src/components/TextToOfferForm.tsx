@@ -15,6 +15,7 @@ import {
   Plane,
   ChevronDown,
   ChevronUp,
+  Search,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -252,6 +253,11 @@ const TextToOfferForm: React.FC<TextToOfferFormProps> = ({ onNavigateToEditor, s
   const [urlPreviews, setUrlPreviews] = useState<Record<number, UrlPreview>>({});
   const [hotelResults, setHotelResults] = useState<Record<number, HotelGoogleResult>>({});
 
+  // Recherche web
+  const [webQuery, setWebQuery] = useState('');
+  const [webResults, setWebResults] = useState<{title:string;url:string;snippet:string}[]>([]);
+  const [webSearchLoading, setWebSearchLoading] = useState(false);
+
 const [companyInfo] = useState<CompanyInfo>({
     name: 'Invitation au Voyage',
     address: "123 Rue de l'Innovation, 75001 Paris",
@@ -298,6 +304,39 @@ const [companyInfo] = useState<CompanyInfo>({
     }));
   }, []);
 
+
+  const handleWebSearch = useCallback(async (q: string) => {
+    if (!q.trim()) return;
+    setWebSearchLoading(true);
+    setWebResults([]);
+    try {
+      const res = await api.get(`api/web-search/?q=${encodeURIComponent(q)}`);
+      setWebResults(res.data.results || []);
+    } catch {
+      setWebResults([]);
+    } finally {
+      setWebSearchLoading(false);
+    }
+  }, []);
+
+  // Ajouter un résultat web comme source et scraper les images automatiquement
+  const addWebResultAsSource = useCallback((url: string) => {
+    const emptyIdx = websiteUrls.findIndex(u => !u.trim());
+    let targetIdx: number;
+    if (emptyIdx >= 0) {
+      const updated = [...websiteUrls];
+      updated[emptyIdx] = url;
+      setWebsiteUrls(updated);
+      targetIdx = emptyIdx;
+    } else {
+      setWebsiteUrls(prev => [...prev, url]);
+      targetIdx = websiteUrls.length;
+    }
+    setWebResults([]);
+    setWebQuery('');
+    // Auto-scrape images
+    setTimeout(() => fetchUrlPreview(targetIdx, url), 100);
+  }, [websiteUrls, fetchUrlPreview]);
 
   const addUrlField = () => setWebsiteUrls([...websiteUrls, '']);
   const removeUrlField = (index: number) => {
@@ -600,6 +639,61 @@ const [companyInfo] = useState<CompanyInfo>({
         {/* ── Section 4 : Sources de contenu ────────────────────────────────── */}
         <section className="space-y-4">
           <h2 className="text-base font-semibold text-gray-800 border-b border-gray-100 pb-2">Sources de contenu</h2>
+
+          {/* ── Barre de recherche Google ─────────────────────────────────── */}
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <Input
+                  value={webQuery}
+                  onChange={e => setWebQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleWebSearch(webQuery)}
+                  placeholder="Rechercher un hôtel ou destination..."
+                  className="pl-9 bg-gray-50 border-gray-200 text-sm focus:bg-white"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => handleWebSearch(webQuery)}
+                disabled={webSearchLoading || !webQuery.trim()}
+                className="hover:bg-purple-50 hover:text-purple-600 shrink-0"
+              >
+                {webSearchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Rechercher'}
+              </Button>
+            </div>
+
+            {/* Résultats */}
+            {webResults.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                {webResults.map((r, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => addWebResultAsSource(r.url)}
+                    className="w-full text-left px-4 py-3 hover:bg-purple-50 transition-colors border-b border-gray-100 last:border-0 group"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate group-hover:text-purple-700">{r.title}</p>
+                        <p className="text-xs text-purple-600 truncate mt-0.5">{r.url}</p>
+                        {r.snippet && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{r.snippet}</p>}
+                      </div>
+                      <Plus className="w-4 h-4 text-gray-300 group-hover:text-purple-500 shrink-0 mt-0.5" />
+                    </div>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => { setWebResults([]); setWebQuery(''); }}
+                  className="w-full px-4 py-2 text-xs text-gray-400 hover:text-gray-600 text-center border-t border-gray-100"
+                >
+                  Fermer
+                </button>
+              </div>
+            )}
+          </div>
 
           {websiteUrls.map((url, index) => (
             <div key={index} className="space-y-2">
