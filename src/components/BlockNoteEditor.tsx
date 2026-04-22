@@ -783,8 +783,53 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
         </div>`;
       }
 
-      // Injecter la date en haut + disclaimer et mosaïque en bas
-      bodyHTML = `<p style="text-align:right;font-size:12px;color:#888;font-family:Corbel,Arial,sans-serif;margin:0 0 16px 0;">Date : ${dateStr}</p>${bodyHTML}
+      // ── Fiche séjour structurée ────────────────────────────────────────
+      const si = prefilledData?.structured_info;
+      let ficheHTML = '';
+      if (si) {
+        const row = (icon: string, label: string, value: string) =>
+          value ? `<tr>
+            <td style="padding:5px 16px 5px 0;color:#6b7280;white-space:nowrap;vertical-align:top;font-size:12px;">${icon}&nbsp;${label}</td>
+            <td style="padding:5px 0;color:#111827;font-weight:600;font-size:13px;">${value}</td>
+          </tr>` : '';
+
+        const destVal = Array.isArray(si.destinations) ? si.destinations.filter(Boolean).join(' · ') : '';
+        const logVal  = Array.isArray(si.logements)    ? si.logements.filter(Boolean).join(' · ')    : '';
+
+        let rows = '';
+        rows += row('🌍', 'Destination(s)', destVal);
+        rows += row('📅', 'Dates', si.dates || '');
+        rows += row('🏨', 'Logement(s)', logVal);
+        rows += row('🛏', 'Chambre', si.type_chambre || '');
+        rows += row('🍽', 'Repas', si.repas || '');
+        rows += row('🚌', 'Transferts', si.transfert || '');
+        rows += row('🚢', 'Croisière', si.croisiere || '');
+
+        (si.flights || []).forEach((f: any) => {
+          const dep = f.dep_city || f.dep_airport || '';
+          const arr = f.arr_city || f.arr_airport || '';
+          const offset = f.arrival_day_offset > 0 ? ` +${f.arrival_day_offset}j` : '';
+          const parts = [
+            f.flight_number,
+            dep && arr ? `${dep} → ${arr}` : '',
+            f.dep_time && f.arr_time ? `${f.dep_time} → ${f.arr_time}${offset}` : '',
+            f.duration,
+            f.cabin,
+          ].filter(Boolean);
+          const legLabel = f.leg === 'retour' ? 'Vol retour' : 'Vol aller';
+          rows += row('✈', legLabel, parts.join('&nbsp;&nbsp;|&nbsp;&nbsp;'));
+        });
+
+        if (rows) {
+          ficheHTML = `<div style="margin:0 0 28px 0;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:8px;padding:14px 20px;font-family:Corbel,Arial,sans-serif;">
+            <p style="margin:0 0 10px 0;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;">Récapitulatif du séjour</p>
+            <table style="width:100%;border-collapse:collapse;">${rows}</table>
+          </div>`;
+        }
+      }
+
+      // Injecter la date en haut + fiche séjour + disclaimer et mosaïque en bas
+      bodyHTML = `<p style="text-align:right;font-size:12px;color:#888;font-family:Corbel,Arial,sans-serif;margin:0 0 16px 0;">Date : ${dateStr}</p>${ficheHTML}${bodyHTML}
 <div style="margin-top:40px;padding-top:10px;border-top:1px solid #e5e7eb;">
   <p style="font-size:11px;color:#999;font-style:italic;font-family:Corbel,Arial,sans-serif;line-height:1.5;margin:0;">
     <strong style="color:#666;">Tarifs et conditions</strong> — Offre sous réserve de disponibilités au moment de la réservation.
