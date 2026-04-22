@@ -761,24 +761,27 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
       const now = new Date();
       const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
 
-      // Mosaïque finale 2×4 avec toutes les images du document
+      // Mosaïque finale 2×4 : images de l'éditeur + scraped_images du backend
       const allImageUrls: string[] = [];
       blocks.forEach((b: any) => {
         if (b.type === 'image' && b.props?.url) allImageUrls.push(b.props.url);
       });
-      // Dédoublonner et limiter à 8
-      const mosaicUrls = [...new Set(allImageUrls)].slice(0, 8);
+      // Ajouter les images scrapées si pas déjà présentes
+      const scrapedImgs: string[] = prefilledData?.scraped_images || [];
+      scrapedImgs.forEach((u: string) => { if (u && !allImageUrls.includes(u)) allImageUrls.push(u); });
+
+      const mosaicUrls = [...new Set(allImageUrls)].filter(Boolean).slice(0, 8);
       let mosaicHTML = '';
       if (mosaicUrls.length > 0) {
         const cells = mosaicUrls.map(url =>
-          `<td style="padding:3px;"><img src="${url}" alt="" style="width:100%;height:100px;object-fit:cover;border-radius:4px;display:block;" /></td>`
+          `<td style="padding:4px;width:25%;"><img src="${url}" alt="" style="width:100%;height:110px;object-fit:cover;border-radius:6px;display:block;" /></td>`
         );
-        // 2 colonnes × N lignes
         const rows: string[] = [];
         for (let i = 0; i < cells.length; i += 4) {
           rows.push(`<tr>${cells.slice(i, i + 4).join('')}</tr>`);
         }
-        mosaicHTML = `<div style="margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px;">
+        mosaicHTML = `<div style="margin-top:36px;padding-top:20px;border-top:2px solid #e5e7eb;font-family:Corbel,Arial,sans-serif;">
+          <p style="margin:0 0 12px 0;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;">Galerie photos</p>
           <table style="width:100%;border-collapse:collapse;">${rows.join('')}</table>
         </div>`;
       }
