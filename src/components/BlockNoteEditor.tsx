@@ -761,16 +761,31 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
       const now = new Date();
       const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
 
-      // Mosaïque finale 2×4 : images de l'éditeur + scraped_images du backend
-      const allImageUrls: string[] = [];
-      blocks.forEach((b: any) => {
-        if (b.type === 'image' && b.props?.url) allImageUrls.push(b.props.url);
-      });
-      // Ajouter les images scrapées si pas déjà présentes
-      const scrapedImgs: string[] = prefilledData?.scraped_images || [];
-      scrapedImgs.forEach((u: string) => { if (u && !allImageUrls.includes(u)) allImageUrls.push(u); });
+      // Mosaïque finale 2×4 : toutes les sources d'images disponibles
+      const seenUrls = new Set<string>();
+      const addImg = (u: any) => {
+        const url = typeof u === 'string' ? u : u?.url;
+        if (url && url.startsWith('http') && !seenUrls.has(url)) {
+          // Exclure les logos de compagnies aériennes (trop petits, 70px)
+          if (!url.includes('gstatic.com/flights')) {
+            seenUrls.add(url);
+          }
+        }
+      };
 
-      const mosaicUrls = [...new Set(allImageUrls)].filter(Boolean).slice(0, 8);
+      // 1. Images dans les blocs de l'éditeur
+      blocks.forEach((b: any) => {
+        if (b.type === 'image' && b.props?.url) addImg(b.props.url);
+      });
+      // 2. scraped_images retournées par le backend
+      (prefilledData?.scraped_images || []).forEach(addImg);
+      // 3. Images dans les sections de l'offer_structure (backup)
+      (prefilledData?.offer_structure?.sections || []).forEach((sec: any) => {
+        if (sec.images) sec.images.forEach(addImg);
+        if (sec.image) addImg(sec.image);
+      });
+
+      const mosaicUrls = [...seenUrls].slice(0, 8);
       let mosaicHTML = '';
       if (mosaicUrls.length > 0) {
         const cells = mosaicUrls.map(url =>
