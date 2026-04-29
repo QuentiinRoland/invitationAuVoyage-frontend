@@ -46,6 +46,8 @@ interface FlightInfo {
   arrTime: string;
   duration: string;
   cabin: CabinClass;
+  stopover: string;
+  stopoverDuration: string;
 }
 
 interface UrlPreview {
@@ -88,7 +90,7 @@ const MAX_HISTORY = 15;
 
 const EMPTY_FLIGHT: FlightInfo = {
   flightNumber: '', date: '', depCity: '', arrCity: '',
-  depTime: '', arrTime: '', duration: '', cabin: 'eco',
+  depTime: '', arrTime: '', duration: '', cabin: 'eco', stopover: '', stopoverDuration: '',
 };
 
 const CABIN_OPTIONS: { value: CabinClass; label: string }[] = [
@@ -216,6 +218,18 @@ const FlightBlock = ({
           <label className="text-xs text-gray-500">Durée</label>
           <Input value={flight.duration} onChange={e => set('duration', e.target.value)}
             placeholder="10h30" className="bg-white border-gray-200 text-sm" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs text-gray-500">Escale (ville ou aéroport)</label>
+          <Input value={flight.stopover} onChange={e => set('stopover', e.target.value)}
+            placeholder="Ex: Istanbul, Amsterdam..." className="bg-white border-gray-200 text-sm" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-gray-500">Durée d'escale</label>
+          <Input value={flight.stopoverDuration} onChange={e => set('stopoverDuration', e.target.value)}
+            placeholder="Ex: 2h30" className="bg-white border-gray-200 text-sm" />
         </div>
       </div>
       <CabinSelector value={flight.cabin} onChange={v => set('cabin', v)} />
@@ -397,6 +411,8 @@ const [companyInfo] = useState<CompanyInfo>({
           arr_time: outboundFlight.arrTime,
           duration: outboundFlight.duration,
           cabin_class: outboundFlight.cabin,
+          stopover: outboundFlight.stopover || undefined,
+          stopover_duration: outboundFlight.stopoverDuration || undefined,
           leg: 'aller',
         };
       }
@@ -410,6 +426,8 @@ const [companyInfo] = useState<CompanyInfo>({
           arr_time: returnFlight.arrTime,
           duration: returnFlight.duration,
           cabin_class: returnFlight.cabin,
+          stopover: returnFlight.stopover || undefined,
+          stopover_duration: returnFlight.stopoverDuration || undefined,
           leg: 'retour',
         };
       }
@@ -434,8 +452,33 @@ const [companyInfo] = useState<CompanyInfo>({
       setInputHistory(updated);
 
       if (onNavigateToEditor && offerData) {
-        const curatedImages = Object.values(urlPreviews).filter(p => !p.loading).flatMap(p => p.images);
-        onNavigateToEditor(curatedImages.length > 0 ? { ...offerData, scraped_images: curatedImages } : offerData);
+        // Liste curée par l'utilisateur (URLs survivantes après suppressions dans le formulaire)
+        const curatedImages = [
+          ...Object.values(urlPreviews).filter(p => !p.loading).flatMap(p => p.images),
+          ...Object.values(hotelResults).filter(r => !r.loading && !r.error).flatMap(r => r.photos),
+        ];
+        const curatedSet = new Set(curatedImages);
+        const urlOf = (img: any) => (typeof img === 'string' ? img : img?.url || '');
+
+        // Filtrer les images des sections pour ne garder QUE celles présentes dans la liste curée.
+        // Si la liste curée est vide → aucune image scrapée dans le PDF.
+        const filteredOffer: any = { ...offerData, scraped_images: curatedImages };
+        if (filteredOffer.offer_structure?.sections) {
+          filteredOffer.offer_structure = {
+            ...filteredOffer.offer_structure,
+            sections: filteredOffer.offer_structure.sections.map((sec: any) => {
+              const next: any = { ...sec };
+              if (Array.isArray(sec.images)) {
+                next.images = sec.images.filter((img: any) => curatedSet.has(urlOf(img)));
+              }
+              if (sec.image && !curatedSet.has(urlOf(sec.image))) {
+                delete next.image;
+              }
+              return next;
+            }),
+          };
+        }
+        onNavigateToEditor(filteredOffer);
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Erreur lors de la génération');

@@ -1891,7 +1891,7 @@ const PuckEditor: React.FC<PuckEditorProps> = ({
   
   const [headerFooter, setHeaderFooter] = useState({
     enabled: true, // ✅ Réactivé avec les nouvelles images par défaut
-    headerLogo: 'https://i.imgur.com/ENSFl11.png',// ✅ Nouvelle image header
+    headerLogo: 'https://i.imgur.com/Yc6RF8t.png',// ✅ Nouvelle image header
     headerText: '',  // Pas de texte, juste l'image
     footerLogo: 'https://i.imgur.com/6Ku63dc.png', // ✅ Nouvelle image footer
     footerText: '', // Pas de texte, juste l'image

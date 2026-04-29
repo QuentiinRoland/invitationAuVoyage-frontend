@@ -4,7 +4,6 @@ import { BlockNoteView } from '@blocknote/shadcn';
 import '@blocknote/shadcn/style.css';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/SimpleAuthContext';
-import footerBg from '../assets/design-footer.png';
 
 // ===== COULEURS PAR TYPE DE SECTION =====
 const SECTION_COLORS: Record<string, string> = {
@@ -17,6 +16,11 @@ const SECTION_COLORS: Record<string, string> = {
   Price: 'pink',
   Prix: 'pink',
   Tarifs: 'pink',
+  Croisiere: 'blue',
+  Croisière: 'blue',
+  Info: 'yellow',
+  Formalités: 'yellow',
+  Services: 'green',
 };
 
 const getSectionColor = (type: string, title: string): string => {
@@ -169,14 +173,6 @@ const convertOfferToBlocks = (offer: any): any[] => {
       if (section.flight_data) {
         const fd = section.flight_data;
 
-        // Logo compagnie juste sous le titre de section
-        if (fd.airline_logo_url) {
-          blocks.push({
-            type: 'image',
-            props: { url: fd.airline_logo_url, caption: fd.airline || fd.carrier_code || '', width: 80, textAlignment: 'left' },
-          });
-        }
-
         const legLabel = fd.leg === 'retour' ? '✈️ Vol retour' : '✈️ Vol aller';
         const cabinLabels: Record<string, string> = {
           eco: 'Économique', premium_eco: 'Premium Économique', business: 'Business'
@@ -233,7 +229,77 @@ const convertOfferToBlocks = (offer: any): any[] => {
       } else {
         // Sections non-vol : parser le body text normalement
         const raw = section.body || section.content || section.description || section.details || '';
-        if (raw) {
+        const dayImages: Record<string, any[]> = section.day_images || {};
+        const hasDayImages = dayImages && Object.keys(dayImages).length > 0;
+
+        if (raw && hasDayImages) {
+          // Programme avec day_images : split body par jour, paragraphes puis images
+          const lines = raw.split('\n');
+          let currentDayKey: string | null = null;
+          let chunkLines: string[] = [];
+
+          const flushChunk = () => {
+            // Émettre le contenu du chunk courant (heading + paragraphes)
+            if (chunkLines.length > 0) {
+              parseBody(chunkLines.join('\n'), color);
+              chunkLines = [];
+            }
+            // Puis les images du jour si on en a (caption vide pour ne pas afficher de référence)
+            if (currentDayKey && dayImages[currentDayKey]) {
+              dayImages[currentDayKey].forEach((img: any) => {
+                const url = typeof img === 'string' ? img : img?.url;
+                if (url) {
+                  blocks.push({
+                    type: 'image',
+                    props: { url, caption: '', width: 280, textAlignment: 'left' },
+                  });
+                }
+              });
+              if (dayImages[currentDayKey].length > 0) {
+                blocks.push({ type: 'paragraph', content: [] });
+              }
+            }
+          };
+
+          // Détecte les headings de jour (## Jour X / ### Jour X / ## Day X / etc.)
+          const DAY_LINE_RE = /^#{2,3}\s+(.*?(?:jour|day|étape|etape|nuit|semaine)\s*\d+.*?|\d+\s*(?:er|ère|ème|e|eme)?\s+jour.*?|(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche).*?)\s*$/i;
+
+          // Helper : signature normalisée d'un titre de jour ("Jour 1", "Day 1", etc.)
+          // Utilisée pour matcher entre les clés backend et le heading frontend même
+          // si la ponctuation/casse diffère.
+          const daySignature = (s: string): string | null => {
+            const m = s.toLowerCase().match(/(jour|day|étape|etape|nuit|semaine)\s*(\d+)/);
+            if (m) return `${m[1]}${m[2]}`;
+            const m2 = s.toLowerCase().match(/(\d+)\s*(?:er|ère|ème|e|eme)?\s+jour/);
+            if (m2) return `jour${m2[1]}`;
+            const m3 = s.toLowerCase().match(/^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)/);
+            if (m3) return m3[1];
+            return null;
+          };
+
+          for (const line of lines) {
+            const m = line.match(DAY_LINE_RE);
+            if (m) {
+              // Nouveau jour : flush l'ancien (avec ses images)
+              flushChunk();
+              const headingText = line.replace(/^#+\s+/, '').trim();
+              const headSig = daySignature(headingText);
+              // Trouver la clé day_images correspondante (par signature, sinon includes)
+              currentDayKey = Object.keys(dayImages).find(k => {
+                const kSig = daySignature(k);
+                if (headSig && kSig && headSig === kSig) return true;
+                return (
+                  headingText.toLowerCase().includes(k.toLowerCase()) ||
+                  k.toLowerCase().includes(headingText.toLowerCase())
+                );
+              }) || null;
+              chunkLines.push(line);
+            } else {
+              chunkLines.push(line);
+            }
+          }
+          flushChunk();
+        } else if (raw) {
           parseBody(raw, color);
         }
 
@@ -277,15 +343,42 @@ const convertOfferToBlocks = (offer: any): any[] => {
     });
   }
 
+  // ── Disclaimer (avant galerie, pour que le PDF le conserve) ─────────────
+  blocks.push({ type: 'paragraph', content: [] });
+  blocks.push({
+    type: 'paragraph',
+    content: [
+      { type: 'text', text: 'Tarifs et conditions', styles: { bold: true } },
+      { type: 'text', text: ' — Offre sous réserve de disponibilités au moment de la réservation. Les prix indiqués sont donnés à titre indicatif et peuvent être modifiés sans préavis.', styles: { italic: true } },
+    ],
+  });
+
   return blocks.length > 0 ? blocks : [{ type: 'paragraph', content: [] }];
+};
+
+// Supprime l'ancienne section "Galerie photos" si elle existe dans les blocs sauvegardés
+// (les documents anciens avaient la galerie comme blocs dans l'éditeur)
+const stripGallerySection = (blocks: any[]): any[] => {
+  const galleryIdx = blocks.findIndex((b: any) =>
+    b.type === 'heading' &&
+    b.content?.some((c: any) => typeof c.text === 'string' && c.text.includes('Galerie photos'))
+  );
+  if (galleryIdx < 0) return blocks;
+  // Retire la galerie et les paragraphes vides qui la précèdent
+  const result = blocks.slice(0, galleryIdx);
+  while (result.length > 0 && result[result.length - 1].type === 'paragraph' &&
+         (!result[result.length - 1].content || result[result.length - 1].content.length === 0)) {
+    result.pop();
+  }
+  return result;
 };
 
 // Convertir données sauvegardées (blocknote_data) ou offre
 const getInitialBlocks = (prefilledData: any): any[] | null => {
   if (!prefilledData) return null;
 
-  // Cas 1 : données BlockNote déjà sauvegardées
-  if (prefilledData.blocknote_data) return prefilledData.blocknote_data;
+  // Cas 1 : données BlockNote déjà sauvegardées — supprime l'ancienne galerie si présente
+  if (prefilledData.blocknote_data) return stripGallerySection(prefilledData.blocknote_data);
 
   // Cas 2 : offre IA avec offer_structure
   if (prefilledData.offer_structure) {
@@ -321,7 +414,6 @@ const renderFlightCardHTML = (fd: any): string => {
   const arrTime = fd.arrival_time || '';
   const duration = fd.total_duration || '';
   const fn = fd.flight_number || '';
-  const logoUrl = fd.airline_logo_url || '';
   const airline = fd.airline || fd.carrier_code || '';
   const stops = fd.stops || 0;
   const stopovers: any[] = fd.stopovers || [];
@@ -344,7 +436,6 @@ const renderFlightCardHTML = (fd: any): string => {
   return `
 <div style="background:#EFF6FF;border:1.5px solid #3B82F6;border-radius:10px;padding:16px 20px;margin:12px 0;font-family:Corbel,Arial,sans-serif;">
   <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap;">
-    ${logoUrl ? `<img src="${logoUrl}" height="36" style="object-fit:contain;flex-shrink:0;" />` : ''}
     <div style="flex:1;">
       <span style="font-weight:bold;font-size:15px;color:#1E3A5F;">${airline}</span>
       ${fn ? `<span style="margin-left:10px;color:#6B7280;font-size:13px;">✈ ${fn}</span>` : ''}
@@ -431,10 +522,10 @@ const convertBlocksToHTML = (blocks: any[]): string => {
       case 'heading': {
         const level = block.props?.level || 1;
         const style = level === 1
-          ? 'font-size:24px;color:#2c3e50;border-bottom:2px solid #e0e0e0;padding-bottom:6px;margin:20px 0 10px 0;'
+          ? 'margin:20px 0 10px 0;'
           : level === 2
-            ? 'font-size:18px;margin:18px 0 8px 0;'
-            : 'font-size:15px;margin:12px 0 6px 0;';
+            ? 'margin:18px 0 8px 0;'
+            : 'margin:12px 0 6px 0;';
         html += `<h${level} style="${style}">${text}</h${level}>`;
         break;
       }
@@ -464,7 +555,7 @@ const convertBlocksToHTML = (blocks: any[]): string => {
 };
 
 // ===== FOOTER COMPONENT =====
-const FOOTER_BEIGE = '#c8a882';
+const FOOTER_BEIGE = '#f7711b';
 
 const IconBox: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div style={{
@@ -539,7 +630,7 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
   const IMAGE_PAGE_SIZE = 20;
   const [headerFooter] = useState({
     enabled: true,
-    headerLogo: 'https://i.imgur.com/ENSFl11.png',
+    headerLogo: 'https://i.imgur.com/Yc6RF8t.png',
   });
 
   const initialBlocks = getInitialBlocks(prefilledData);
@@ -755,6 +846,21 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
         );
       });
 
+      // Détection par position : suites de 2+ <img> consécutifs (whitespace seul entre)
+      // → mosaïque côte à côte (table flex). Cela groupe automatiquement les images
+      // d'un jour (3 d'affilée) et les paires d'images de section (Hôtel, Prix…).
+      bodyHTML = bodyHTML.replace(
+        /(<img\b[^>]*>\s*){2,}/g,
+        (run) => {
+          const urls = [...run.matchAll(/<img\b[^>]*src="([^"]+)"[^>]*>/g)].map(m => m[1]);
+          if (urls.length < 2) return run;
+          const cells = urls.map(url =>
+            `<td style="padding:0 4px;width:${100 / urls.length}%;"><img src="${url}" alt="" style="width:100%;height:130px;object-fit:cover;border-radius:6px;display:block;" /></td>`
+          ).join('');
+          return `<table style="width:100%;border-collapse:collapse;margin:6px 0 16px 0;"><tr>${cells}</tr></table>`;
+        }
+      );
+
       const title = getDocTitle();
 
       // Date du jour au format JJ/MM/AAAA
@@ -766,26 +872,30 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
       const addImg = (u: any) => {
         const url = typeof u === 'string' ? u : u?.url;
         if (url && url.startsWith('http') && !seenUrls.has(url)) {
-          // Exclure les logos de compagnies aériennes (trop petits, 70px)
           if (!url.includes('gstatic.com/flights')) {
             seenUrls.add(url);
           }
         }
       };
 
-      // 1. Images dans les blocs de l'éditeur
-      blocks.forEach((b: any) => {
-        if (b.type === 'image' && b.props?.url) addImg(b.props.url);
-      });
-      // 2. scraped_images retournées par le backend
-      (prefilledData?.scraped_images || []).forEach(addImg);
-      // 3. Images dans les sections de l'offer_structure (backup)
-      (prefilledData?.offer_structure?.sections || []).forEach((sec: any) => {
-        if (sec.images) sec.images.forEach(addImg);
-        if (sec.image) addImg(sec.image);
-      });
+      // Parcours récursif de TOUS les blocs (y compris les enfants imbriqués)
+      const walkBlocks = (blockList: any[]) => {
+        blockList.forEach((b: any) => {
+          if (b.type === 'image' && b.props?.url) addImg(b.props.url);
+          if (b.children && b.children.length > 0) walkBlocks(b.children);
+        });
+      };
 
-      const mosaicUrls = [...seenUrls].slice(0, 8);
+      // 1. Toutes les images dans l'éditeur (récursif) — c'est la source de vérité,
+      //    si l'utilisateur a supprimé des images dans l'éditeur elles disparaissent.
+      walkBlocks(blocks);
+      // 2. scraped_images curées par l'utilisateur (depuis le formulaire)
+      (prefilledData?.scraped_images || []).forEach(addImg);
+      // (NB : on ne ramasse PAS prefilledData.offer_structure.sections — elles sont
+      //  déjà converties en blocs image par convertOfferToBlocks. Sinon on
+      //  réintroduirait des images que l'utilisateur a supprimées du formulaire.)
+
+      const mosaicUrls = [...seenUrls];
       let mosaicHTML = '';
       if (mosaicUrls.length > 0) {
         const cells = mosaicUrls.map(url =>
@@ -795,64 +905,13 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
         for (let i = 0; i < cells.length; i += 4) {
           rows.push(`<tr>${cells.slice(i, i + 4).join('')}</tr>`);
         }
-        mosaicHTML = `<div style="margin-top:36px;padding-top:20px;border-top:2px solid #e5e7eb;font-family:Corbel,Arial,sans-serif;">
-          <p style="margin:0 0 12px 0;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;">Galerie photos</p>
+        mosaicHTML = `<div style="margin-top:36px;padding-top:20px;font-family:Corbel,Arial,sans-serif;">
           <table style="width:100%;border-collapse:collapse;">${rows.join('')}</table>
         </div>`;
       }
 
-      // ── Fiche séjour structurée ────────────────────────────────────────
-      const si = prefilledData?.structured_info;
-      let ficheHTML = '';
-      if (si) {
-        const row = (icon: string, label: string, value: string) =>
-          value ? `<tr>
-            <td style="padding:5px 16px 5px 0;color:#6b7280;white-space:nowrap;vertical-align:top;font-size:12px;">${icon}&nbsp;${label}</td>
-            <td style="padding:5px 0;color:#111827;font-weight:600;font-size:13px;">${value}</td>
-          </tr>` : '';
-
-        const destVal = Array.isArray(si.destinations) ? si.destinations.filter(Boolean).join(' · ') : '';
-        const logVal  = Array.isArray(si.logements)    ? si.logements.filter(Boolean).join(' · ')    : '';
-
-        let rows = '';
-        rows += row('🌍', 'Destination(s)', destVal);
-        rows += row('📅', 'Dates', si.dates || '');
-        rows += row('🏨', 'Logement(s)', logVal);
-        rows += row('🛏', 'Chambre', si.type_chambre || '');
-        rows += row('🍽', 'Repas', si.repas || '');
-        rows += row('🚌', 'Transferts', si.transfert || '');
-        rows += row('🚢', 'Croisière', si.croisiere || '');
-
-        (si.flights || []).forEach((f: any) => {
-          const dep = f.dep_city || f.dep_airport || '';
-          const arr = f.arr_city || f.arr_airport || '';
-          const offset = f.arrival_day_offset > 0 ? ` +${f.arrival_day_offset}j` : '';
-          const parts = [
-            f.flight_number,
-            dep && arr ? `${dep} → ${arr}` : '',
-            f.dep_time && f.arr_time ? `${f.dep_time} → ${f.arr_time}${offset}` : '',
-            f.duration,
-            f.cabin,
-          ].filter(Boolean);
-          const legLabel = f.leg === 'retour' ? 'Vol retour' : 'Vol aller';
-          rows += row('✈', legLabel, parts.join('&nbsp;&nbsp;|&nbsp;&nbsp;'));
-        });
-
-        if (rows) {
-          ficheHTML = `<div style="margin:0 0 28px 0;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:8px;padding:14px 20px;font-family:Corbel,Arial,sans-serif;">
-            <p style="margin:0 0 10px 0;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;">Récapitulatif du séjour</p>
-            <table style="width:100%;border-collapse:collapse;">${rows}</table>
-          </div>`;
-        }
-      }
-
-      // Injecter la date en haut + fiche séjour + disclaimer et mosaïque en bas
-      bodyHTML = `<p style="text-align:right;font-size:12px;color:#888;font-family:Corbel,Arial,sans-serif;margin:0 0 16px 0;">Date : ${dateStr}</p>${ficheHTML}${bodyHTML}
-<div style="margin-top:40px;padding-top:10px;border-top:1px solid #e5e7eb;">
-  <p style="font-size:11px;color:#999;font-style:italic;font-family:Corbel,Arial,sans-serif;line-height:1.5;margin:0;">
-    <strong style="color:#666;">Tarifs et conditions</strong> — Offre sous réserve de disponibilités au moment de la réservation.
-  </p>
-</div>${mosaicHTML}`;
+      // Date en haut à droite + mosaïque en bas
+      bodyHTML = `<p style="text-align:right;font-size:12px;color:#888;font-family:Corbel,Arial,sans-serif;margin:0 0 16px 0;">Date : ${dateStr}</p>${bodyHTML}${mosaicUrls.length > 0 ? mosaicHTML : ''}`;
 
       const headerHTML = headerFooter.enabled ? `
         <div class="page-header">
@@ -860,50 +919,77 @@ const BlockNoteEditorComponent: React.FC<BlockNoteEditorProps> = ({
         </div>` : '';
 
       const userEmail = user?.email || 'info@invit.be';
-      const iconDiv = (svg: string) => `<div style="width:28px;height:28px;background:#c8a882;border-radius:4px;display:inline-block;vertical-align:middle;margin-right:8px;text-align:center;line-height:28px;">${svg}</div>`;
+      const iconDiv = (svg: string) => `<div style="width:28px;height:28px;background:#f7711b;border-radius:4px;display:inline-block;vertical-align:middle;margin-right:8px;text-align:center;line-height:28px;">${svg}</div>`;
       const phone = iconDiv(`<svg width="13" height="13" fill="white" viewBox="0 0 24 24" style="vertical-align:middle;"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>`);
       const mail  = iconDiv(`<svg width="13" height="13" fill="white" viewBox="0 0 24 24" style="vertical-align:middle;"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>`);
       const pin   = iconDiv(`<svg width="13" height="13" fill="white" viewBox="0 0 24 24" style="vertical-align:middle;"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`);
       const txt   = 'font-size:13px;color:#4a4a4a;font-family:Corbel,Arial,sans-serif;vertical-align:middle;';
 
       const footerHTML2 = headerFooter.enabled ? `
-        <table class="page-footer" style="width:210mm;border-collapse:collapse;border-top:1px solid #e5e7eb;">
-          <tr>
-            <td style="padding:14px 0 14px 15mm;vertical-align:middle;white-space:nowrap;">
-              ${phone}<span style="${txt}">+32 2 774 04 04</span>
-            </td>
-            <td style="padding:14px 0;vertical-align:middle;text-align:center;white-space:nowrap;">
-              ${mail}<span style="vertical-align:middle;display:inline-block;">
-                <span style="display:block;${txt}">${userEmail}</span>
-                <span style="display:block;font-size:12px;color:#888;font-family:Corbel,Arial,sans-serif;">https://www.invit.be/</span>
-              </span>
-            </td>
-            <td style="padding:14px 15mm 14px 0;vertical-align:middle;text-align:right;white-space:nowrap;">
-              ${pin}<span style="vertical-align:middle;display:inline-block;">
-                <span style="display:block;${txt}">Av. Baron d'Huart 7,</span>
-                <span style="display:block;${txt}">1150 Woluwe St-Pierre</span>
-              </span>
-            </td>
-          </tr>
-        </table>` : '';
+        <div class="page-footer" style="width:210mm;font-family:Corbel,Arial,sans-serif;">
+          <div class="page-num" style="text-align:right;font-size:9pt;color:#888;font-family:Corbel,Arial,sans-serif;padding:0 5mm 2px 0;"></div>
+          <table style="width:210mm;border-collapse:collapse;border-top:1px solid #e5e7eb;">
+            <tr>
+              <td style="padding:14px 0 14px 5mm;vertical-align:middle;white-space:nowrap;">
+                ${phone}<span style="${txt}">+32 2 774 04 04</span>
+              </td>
+              <td style="padding:14px 0;vertical-align:middle;text-align:center;white-space:nowrap;">
+                ${mail}<span style="vertical-align:middle;display:inline-block;">
+                  <span style="display:block;${txt}">${userEmail}</span>
+                  <span style="display:block;font-size:12px;color:#888;font-family:Corbel,Arial,sans-serif;">https://www.invit.be/</span>
+                </span>
+              </td>
+              <td style="padding:14px 5mm 14px 0;vertical-align:middle;text-align:right;white-space:nowrap;">
+                ${pin}<span style="vertical-align:middle;display:inline-block;">
+                  <span style="display:block;${txt}">Av. Baron d'Huart 7,</span>
+                  <span style="display:block;${txt}">1150 Woluwe St-Pierre</span>
+                </span>
+              </td>
+            </tr>
+          </table>
+        </div>` : '';
 
       const html = `${headerHTML}${footerHTML2}<div class="content">${bodyHTML}</div>`;
 
       const css = `
         @page {
           size: A4;
-          margin: ${headerFooter.enabled ? '6cm 0 2.5cm 0' : '3cm 2cm'};
-          @top-left { content: element(header); width: 210mm; }
-          @bottom-left { content: element(footer); width: 210mm; }
+          margin: ${headerFooter.enabled ? '6cm 15mm 3cm 15mm' : '3cm 2cm'};
+          @top-center { content: element(header); width: 210mm; margin-left: -15mm; margin-right: -15mm; }
+          @bottom-center { content: element(footer); width: 210mm; margin-left: -15mm; margin-right: -15mm; }
         }
         body { font-family: Corbel, Arial, sans-serif; color: #2c3e50; background: white; }
         .page-header { position: running(header); width: 210mm; }
         .page-footer { position: running(footer); width: 210mm; }
-        .content { padding: 0 1.5cm; }
-        h1 { font-size: 24px; color: #2c3e50; border-bottom: 3px solid #667eea; padding-bottom: 8px; }
-        h2 { font-size: 18px; }
+        .page-num::after { content: counter(page) " / " counter(pages); }
+
+        /* Titre principal — présentation */
+        h1 {
+          font-family: Corbel, "Gabriola", "Trebuchet MS", Arial, sans-serif;
+          font-size: 48px;
+          font-weight: 600;
+          color: #2c3e50;
+          text-align: center;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          margin: 0 0 8px 0;
+          padding: 0;
+          border: none;
+          line-height: 1.15;
+        }
+        h1::after {
+          content: "";
+          display: block;
+          width: 120px;
+          height: 2px;
+          background: #f7711b;
+          margin: 18px auto 0 auto;
+        }
+
+        h2 { font-size: 18px; font-family: Corbel, Arial, sans-serif; color: #2c3e50; }
+        h3 { font-size: 15px; font-family: Corbel, Arial, sans-serif; color: #2c3e50; }
         ul { list-style: disc; }
-        p { line-height: 1.7; }
+        p { line-height: 1.7; font-family: Corbel, Arial, sans-serif; }
       `;
 
       const response = await api.post('api/grapesjs-pdf-generator/', { html, css,
